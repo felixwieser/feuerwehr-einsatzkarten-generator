@@ -22,8 +22,8 @@ vermutlich gelegentlich ändert).
 1. [NUC vorbereiten](#1-nuc-vorbereiten)
 2. [Projekt auf den NUC übertragen](#2-projekt-auf-den-nuc-übertragen)
 3. [.env auf dem NUC einrichten](#3-env-auf-dem-nuc-einrichten)
-4. [Dynamic DNS einrichten (DuckDNS)](#4-dynamic-dns-einrichten-duckdns)
-5. [GoDaddy: eure Domain auf DuckDNS zeigen lassen](#5-godaddy-eure-domain-auf-duckdns-zeigen-lassen)
+4. [Dynamic DNS einrichten (No-IP)](#4-dynamic-dns-einrichten-no-ip)
+5. [GoDaddy: eure Domain auf No-IP zeigen lassen](#5-godaddy-eure-domain-auf-no-ip-zeigen-lassen)
 6. [Router: Ports freigeben](#6-router-ports-freigeben)
 7. [App starten](#7-app-starten)
 8. [Testen](#8-testen)
@@ -95,44 +95,57 @@ echo "DOMAIN=einsatzkarten.eure-domain.de" >> .env
 (ersetzt `einsatzkarten.eure-domain.de` durch die Adresse, die ihr in Schritt 5 tatsächlich
 einrichtet – z. B. mit eurer echten GoDaddy-Domain statt `eure-domain.de`).
 
-## 4. Dynamic DNS einrichten (DuckDNS)
+## 4. Dynamic DNS einrichten (No-IP)
 
 Eure Heim-Internetverbindung hat fast sicher **keine feste IP-Adresse** – der Provider vergibt
-euch von Zeit zu Zeit eine neue. Damit eure Domain trotzdem immer auf den NUC zeigt, nutzen wir
-[DuckDNS](https://www.duckdns.org/) (kostenlos): es gibt euch eine Adresse wie
-`euer-name.duckdns.org`, die automatisch aktuell gehalten wird, sobald sich eure IP ändert.
-Eure eigentliche Domain bei GoDaddy zeigt dann per CNAME einfach auf diese DuckDNS-Adresse
-(Schritt 5) – nutzt euch also niemand als sichtbare Adresse, läuft nur im Hintergrund mit.
+euch von Zeit zu Zeit eine neue. Da ihr bereits einen No-IP-Account habt, nutzen wir den: er
+gibt euch eine Adresse wie `euer-name.ddns.net`, die automatisch aktuell gehalten werden muss,
+sobald sich eure IP ändert. Eure eigentliche Domain bei GoDaddy zeigt dann per CNAME einfach auf
+diese No-IP-Adresse (Schritt 5).
 
-1. Auf https://www.duckdns.org/ einloggen (z. B. mit Google-Account).
-2. Einen Subdomain-Namen vergeben, z. B. `felix-einsatzkarten` → ihr bekommt
-   `felix-einsatzkarten.duckdns.org`.
-3. Euren angezeigten **Token** kopieren (langer Buchstaben-/Zahlencode auf der Startseite).
-4. Auf dem NUC per SSH ein Update-Skript + Cronjob einrichten, der eure IP alle 5 Minuten
-   aktuell hält:
+**Zuerst prüfen, ob das bei euch schon automatisch passiert** (z. B. weil euer Router No-IP
+schon eingebaut unterstützt – viele tun das unter "DDNS" in den Router-Einstellungen). Von
+eurem Mac aus:
 
-   ```bash
-   mkdir -p ~/duckdns
-   cat > ~/duckdns/duck.sh << 'EOF'
-   echo url="https://www.duckdns.org/update?domains=EUER-SUBDOMAIN-NAME&token=EUER-TOKEN&ip=" | curl -k -o ~/duckdns/duck.log -K -
-   EOF
-   chmod +x ~/duckdns/duck.sh
-   (crontab -l 2>/dev/null; echo "*/5 * * * * ~/duckdns/duck.sh >/dev/null 2>&1") | crontab -
-   ~/duckdns/duck.sh
-   cat ~/duckdns/duck.log
-   ```
+```bash
+dig +short EUER-NAME.ddns.net
+curl -s https://api.ipify.org
+```
 
-   `EUER-SUBDOMAIN-NAME` und `EUER-TOKEN` durch eure echten Werte von duckdns.org ersetzen. Im
-   Log sollte `OK` stehen.
+(`EUER-NAME.ddns.net` durch eure echte No-IP-Adresse ersetzen – die genaue Endung kann auch
+anders lauten, z. B. `.hopto.org`, je nachdem was ihr bei No-IP gewählt habt.)
 
-## 5. GoDaddy: eure Domain auf DuckDNS zeigen lassen
+**Zeigen beide Befehle dieselbe IP-Adresse an → ihr seid fertig**, Schritt 4 ist bereits erledigt,
+weiter mit Schritt 5.
+
+**Zeigen sie unterschiedliche Adressen (oder gar keine) →** dann richtet ihr auf dem NUC einen
+Update-Cronjob ein, der eure IP regelmäßig an No-IP meldet:
+
+```bash
+mkdir -p ~/noip
+cat > ~/noip/update.sh << 'EOF'
+curl -s "https://EUER-BENUTZERNAME:EUER-PASSWORT@dynupdate.no-ip.com/nic/update?hostname=EUER-NAME.ddns.net" -o ~/noip/update.log
+EOF
+chmod +x ~/noip/update.sh
+(crontab -l 2>/dev/null; echo "*/30 * * * * ~/noip/update.sh >/dev/null 2>&1") | crontab -
+~/noip/update.sh
+cat ~/noip/update.log
+```
+
+`EUER-BENUTZERNAME`, `EUER-PASSWORT` und `EUER-NAME.ddns.net` durch eure echten No-IP-Zugangsdaten
+ersetzen. Im Log sollte `good <eure-ip>` oder `nochg <eure-ip>` stehen (beides bedeutet Erfolg).
+
+**Hinweis zu kostenlosen No-IP-Hostnamen:** die müssen alle 30 Tage per E-Mail-Link bestätigt
+werden, sonst laufen sie ab – achtet auf diese Mails von No-IP.
+
+## 5. GoDaddy: eure Domain auf No-IP zeigen lassen
 
 1. Bei GoDaddy einloggen → "Meine Produkte" → bei eurer Domain auf "DNS verwalten".
 2. "Neuer Eintrag":
    - Typ: `CNAME`
    - Name/Host: `einsatzkarten` (der Teil, den ihr als Subdomain wollt)
-   - Wert/Ziel: `felix-einsatzkarten.duckdns.org` (eure DuckDNS-Adresse aus Schritt 4, **mit**
-     Punkt am Ende, falls GoDaddy das verlangt: `felix-einsatzkarten.duckdns.org.`)
+   - Wert/Ziel: `euer-name.ddns.net` (eure No-IP-Adresse aus Schritt 4, **mit** Punkt am Ende,
+     falls GoDaddy das verlangt: `euer-name.ddns.net.`)
    - TTL: Standard belassen
 3. Speichern. Die Domain in eurer `.env` (Schritt 3) muss exakt diesem Namen entsprechen, also
    `einsatzkarten.eure-domain.de`.
@@ -218,9 +231,10 @@ docker run --rm -v einsatzkarten-generator_app-persist:/data -v ~/backups:/backu
   (Standard bei den meisten Distributionen, prüfen mit `systemctl is-enabled docker` – falls
   nicht `enabled`: `sudo systemctl enable docker`). Die Container selbst starten dank
   `restart: unless-stopped` automatisch mit.
-- **Eure sichtbare IP hat sich geändert und die Seite ist nicht mehr erreichbar**: DuckDNS
-  aktualisiert automatisch alle 5 Minuten (Schritt 4) – prüft `~/duckdns/duck.log` auf dem NUC,
-  ob dort `OK` steht.
+- **Eure sichtbare IP hat sich geändert und die Seite ist nicht mehr erreichbar**: Falls euer
+  Router No-IP automatisch aktualisiert, dessen DDNS-Status in der Router-Oberfläche prüfen.
+  Falls ihr den Cronjob aus Schritt 4 nutzt: prüft `~/noip/update.log` auf dem NUC, ob dort
+  `good`/`nochg` steht (nicht z. B. `badauth` – dann stimmen Benutzername/Passwort nicht).
 
 ## 12. Sicherheitshinweise
 
