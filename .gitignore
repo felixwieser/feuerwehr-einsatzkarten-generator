@@ -1,0 +1,34 @@
+# Node / Next.js
+node_modules
+.next
+out
+npm-debug.log*
+
+# Umgebungsvariablen (enthalten Geheimnisse!)
+.env
+.env.local
+
+# Lokale Datenbank & generierte Dateien
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+public/generated/*
+!public/generated/.gitkeep
+
+# MapLibre-Worker-Dateien - werden per "npm install" (postinstall-Skript,
+# siehe scripts/copy-maplibre-worker.js) automatisch aus node_modules
+# kopiert, nicht Teil des Quellcodes.
+public/maplibre/*
+
+# Docker-Rohdaten (OSM-Extrakte, OSRM-Dateien, Nominatim-DB) - sehr groß!
+docker/osrm-data/*
+!docker/osrm-data/.gitkeep
+docker/nominatim-data/*
+!docker/nominatim-data/.gitkeep
+
+# macOS
+.DS_Store
+
+# TypeScript Build-Cache
+tsconfig.tsbuildinfo

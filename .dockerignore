@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+.env
+.env.local
+data
+public/generated/*
+!public/generated/.gitkeep
+public/maplibre
+docker/osrm-data
+docker/nominatim-data
+.git
+.DS_Store
+npm-debug.log*
