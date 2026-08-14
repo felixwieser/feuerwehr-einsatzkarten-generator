@@ -265,7 +265,13 @@ einfach den gesamten Ordner `data/` (und optional `public/generated/`) mit.
 
 Bisher lief die App nur lokal auf eurem Rechner (`npm run dev`). Wollt ihr sie unter einer
 eigenen Adresse im Internet erreichbar machen (z. B. für alle Feuerwachen gemeinsam nutzbar,
-mit eigener Domain) – siehe die separate Anleitung [DEPLOY.md](DEPLOY.md).
+mit eigener Domain), gibt es zwei Wege – beide separat dokumentiert:
+
+- [DEPLOY.md](DEPLOY.md) – Hosting in der Cloud (Railway), keine eigene Hardware nötig, dafür
+  laufende Kosten.
+- [DEPLOY_NUC.md](DEPLOY_NUC.md) – Selbst-Hosting auf eigener Hardware zuhause (z. B. einem
+  NUC), keine laufenden Hosting-Kosten, dafür mehr Einrichtungsaufwand (Portfreigabe, Dynamic
+  DNS) und ihr seid selbst für den Dauerbetrieb verantwortlich.
 
 ---
 

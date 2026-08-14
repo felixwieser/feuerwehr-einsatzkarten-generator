@@ -1,0 +1,60 @@
+# Produktions-Setup für den Betrieb auf eigener Hardware (z. B. einem NUC
+# zuhause) - App + automatischer HTTPS-Reverse-Proxy (Caddy). Vollständige
+# Schritt-für-Schritt-Anleitung: siehe DEPLOY_NUC.md.
+#
+# Getrennt von docker-compose.yml (das ist NUR für die optionalen eigenen
+# OSRM-/Nominatim-Server, siehe README Schritt 7) - beide Dateien lassen
+# sich bei Bedarf gemeinsam starten:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  app:
+    build: .
+    container_name: feuerwehrkarten-app
+    restart: unless-stopped
+    # Bewusst NUR einzelne Variablen durchreichen (statt "env_file: .env")
+    # und dabei DB_PATH/GENERATED_DIR NICHT übernehmen: die App soll im
+    # Container immer die vom docker-entrypoint.sh gesetzten Pfade unter
+    # /app/persist verwenden (siehe dort), sonst würden gespeicherte Karten
+    # bei jedem Neustart verloren gehen.
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org}
+      NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
+      NOMINATIM_CONTACT_EMAIL: ${NOMINATIM_CONTACT_EMAIL:-}
+      NOMINATIM_COUNTRYCODES: ${NOMINATIM_COUNTRYCODES:-de}
+      NOMINATIM_VIEWBOX: ${NOMINATIM_VIEWBOX:-}
+      MAP_ZOOM: ${MAP_ZOOM:-18}
+      MAP_IMAGE_WIDTH: ${MAP_IMAGE_WIDTH:-1490}
+      MAP_IMAGE_HEIGHT: ${MAP_IMAGE_HEIGHT:-1050}
+      MAP_LAST_SEGMENT_METERS: ${MAP_LAST_SEGMENT_METERS:-400}
+      MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+    volumes:
+      - app-persist:/app/persist
+    # Kein Port-Mapping zum Host! Die App ist nur innerhalb des
+    # Docker-Netzwerks für Caddy erreichbar (Adresse "app:3000") - direkt
+    # von außen erreichbar sind nur 80/443 über Caddy (siehe unten).
+    expose:
+      - '3000'
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: feuerwehrkarten-caddy
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  app-persist:
+  caddy-data:
+  caddy-config:

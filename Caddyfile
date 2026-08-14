@@ -1,0 +1,14 @@
+# Caddy holt/erneuert für {$DOMAIN} automatisch ein kostenloses
+# Let's-Encrypt-Zertifikat (HTTPS) und reicht Anfragen an die App weiter -
+# siehe DEPLOY_NUC.md. Die Domain wird aus der Umgebungsvariable DOMAIN
+# gelesen (gesetzt in .env, siehe docker-compose.prod.yml).
+#
+# Optional: eigene E-Mail für Let's-Encrypt-Benachrichtigungen (abgelaufene
+# Zertifikate o.ä.) - dafür ganz oben in dieser Datei ergänzen:
+#   {
+#     email eure-email@example.com
+#   }
+
+{$DOMAIN} {
+	reverse_proxy app:3000
+}
