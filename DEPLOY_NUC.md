@@ -124,7 +124,7 @@ Update-Cronjob ein, der eure IP regelmäßig an No-IP meldet:
 ```bash
 mkdir -p ~/noip
 cat > ~/noip/update.sh << 'EOF'
-curl -s "https://EUER-BENUTZERNAME:EUER-PASSWORT@dynupdate.no-ip.com/nic/update?hostname=EUER-NAME.ddns.net" -o ~/noip/update.log
+curl -s -A "FeuerwehrEinsatzkartenGenerator-DUC/1.0 eure-email@example.com" "https://EUER-BENUTZERNAME:EUER-PASSWORT@dynupdate.no-ip.com/nic/update?hostname=EUER-NAME.ddns.net" -o ~/noip/update.log
 EOF
 chmod +x ~/noip/update.sh
 (crontab -l 2>/dev/null; echo "*/30 * * * * ~/noip/update.sh >/dev/null 2>&1") | crontab -
@@ -132,8 +132,10 @@ chmod +x ~/noip/update.sh
 cat ~/noip/update.log
 ```
 
-`EUER-BENUTZERNAME`, `EUER-PASSWORT` und `EUER-NAME.ddns.net` durch eure echten No-IP-Zugangsdaten
-ersetzen. Im Log sollte `good <eure-ip>` oder `nochg <eure-ip>` stehen (beides bedeutet Erfolg).
+`EUER-BENUTZERNAME`, `EUER-PASSWORT`, `eure-email@example.com` und `EUER-NAME.ddns.net` durch
+eure echten No-IP-Zugangsdaten ersetzen (der eigene User-Agent-Header ist laut No-IP Pflicht -
+Clients ohne aussagekräftigen User-Agent riskieren, gedrosselt/blockiert zu werden). Im Log
+sollte `good <eure-ip>` oder `nochg <eure-ip>` stehen (beides bedeutet Erfolg).
 
 **Hinweis zu kostenlosen No-IP-Hostnamen:** die müssen alle 30 Tage per E-Mail-Link bestätigt
 werden, sonst laufen sie ab – achtet auf diese Mails von No-IP.
