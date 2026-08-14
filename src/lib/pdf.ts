@@ -91,7 +91,12 @@ export async function renderCardPdf(card: CardData): Promise<Buffer> {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 60000 });
+    // Das Kartenbild ist als data:-URI direkt im HTML eingebettet (siehe
+    // mapImageToDataUri oben) - es gibt keine externen Netzwerk-Requests
+    // abzuwarten, "domcontentloaded" reicht daher. ("networkidle0" ist bei
+    // page.setContent() in den Puppeteer-Typdefinitionen ohnehin nicht als
+    // gültiger Wert vorgesehen.)
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 60000 });
     const pdfUint8 = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,

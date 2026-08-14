@@ -48,7 +48,10 @@ export async function POST(req: NextRequest) {
 
     const pdfBuffer = await renderCardPdf(body);
 
-    return new NextResponse(pdfBuffer, {
+    // NextResponse/Response akzeptiert kein Node-Buffer direkt (dessen
+    // Typdefinition passt nicht exakt zum BodyInit-Typ) - als Uint8Array
+    // (Buffer ist zur Laufzeit ohnehin eines) ist es eindeutig kompatibel.
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

@@ -30,6 +30,7 @@ nach unten.
 9. [Beispieltexte für die KI anpassen](#9-beispieltexte-für-die-ki-anpassen)
 10. [Wo landen die Daten?](#10-wo-landen-die-daten)
 11. [Häufige Probleme](#11-häufige-probleme)
+12. [App online stellen (eigene Domain)](#12-app-online-stellen-eigene-domain)
 
 ---
 
@@ -259,6 +260,12 @@ einfach den gesamten Ordner `data/` (und optional `public/generated/`) mit.
 - **Docker-Container "osrm" startet nicht / beendet sich sofort**: Ihr habt vermutlich Schritt
   7.2 (Kartendaten vorbereiten) noch nicht ausgeführt. Ohne aufbereitete Kartendaten unter
   `docker/osrm-data/region.osrm` kann der Server nicht starten.
+
+## 12. App online stellen (eigene Domain)
+
+Bisher lief die App nur lokal auf eurem Rechner (`npm run dev`). Wollt ihr sie unter einer
+eigenen Adresse im Internet erreichbar machen (z. B. für alle Feuerwachen gemeinsam nutzbar,
+mit eigener Domain) – siehe die separate Anleitung [DEPLOY.md](DEPLOY.md).
 
 ---
 
