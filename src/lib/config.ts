@@ -13,9 +13,26 @@ function required(name: string): string {
 }
 
 export const config = {
+  // Primärer LLM-Provider für die Anfahrtsbeschreibung: ein lokaler/eigener
+  // Ollama-Server. Schlägt die Anfrage dort fehl (nicht erreichbar, Timeout,
+  // Fehlerantwort), weicht generateRouteDescription() automatisch auf
+  // Anthropic Claude aus (siehe src/lib/claude.ts) - dafür bleibt
+  // ANTHROPIC_API_KEY weiterhin nötig, auch wenn Ollama der Normalfall ist.
+  ollama: {
+    // Auf "false" setzen, um Ollama komplett zu überspringen und direkt
+    // Anthropic zu nutzen (z. B. wenn ihr keinen Ollama-Server betreibt -
+    // spart sonst bei jeder Anfrage die Wartezeit bis zum Timeout).
+    enabled: (process.env.OLLAMA_ENABLED ?? 'true') !== 'false',
+    url: (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, ''),
+    // Muss vorher lokal geladen sein: "ollama pull llama3.1"
+    model: process.env.OLLAMA_MODEL || 'llama3.1',
+    timeoutMs: Number(process.env.OLLAMA_TIMEOUT_MS || 15000),
+  },
   anthropic: {
-    // Wird lazy per required() geprüft (erst wenn die Klartext-Generierung
-    // tatsächlich aufgerufen wird), damit die App auch ohne Key startet.
+    // Rückfallebene, falls Ollama nicht erreichbar ist oder fehlschlägt
+    // (siehe ollama-Konfiguration oben) - wird lazy per required() geprüft
+    // (erst wenn tatsächlich auf Anthropic ausgewichen wird), damit die App
+    // auch ohne Key startet, solange Ollama zuverlässig läuft.
     get apiKey() {
       return required('ANTHROPIC_API_KEY');
     },

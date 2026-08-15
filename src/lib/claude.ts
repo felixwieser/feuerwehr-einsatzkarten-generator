@@ -33,38 +33,76 @@ function buildUserMessage(rawSteps: string[], targetStreet: string): string {
     .join('\n')}\n\nZielstraße: ${targetStreet}`;
 }
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) {
-    client = new Anthropic({ apiKey: config.anthropic.apiKey });
+// Nachrichten-Typ für die Few-Shot-Beispiele - bewusst nur 'user'/'assistant'
+// (kein 'system'), damit dasselbe Array direkt als Anthropic-Messages-Array
+// verwendbar ist (Anthropic erwartet den System-Prompt separat, nicht als
+// Nachricht). Für Ollama wird zusätzlich eine 'system'-Nachricht vorangestellt
+// (siehe callOllama()) - der Union-Typ dort ist eine Obermenge, das Array
+// lässt sich also verlustfrei hineinspreaden.
+type FewShotMessage = { role: 'user' | 'assistant'; content: string };
+
+function buildFewShotMessages(): FewShotMessage[] {
+  return routeDescriptionExamples.flatMap((ex) => [
+    { role: 'user' as const, content: buildUserMessage(ex.rawSteps, ex.targetStreet) },
+    { role: 'assistant' as const, content: ex.output },
+  ]);
+}
+
+let anthropicClient: Anthropic | null = null;
+function getAnthropicClient(): Anthropic {
+  if (!anthropicClient) {
+    anthropicClient = new Anthropic({ apiKey: config.anthropic.apiKey });
   }
-  return client;
+  return anthropicClient;
 }
 
 /**
- * Übersetzt rohe Routing-Schritte in die kurze deutsche Anfahrtsnotation.
- * Nutzt Few-Shot-Beispiele aus src/config/routeDescriptionExamples.ts.
+ * Ruft einen lokalen/eigenen Ollama-Server auf (primärer Provider - siehe
+ * generateRouteDescription() unten). Nutzt Ollamas natives Chat-API
+ * (POST /api/chat, https://github.com/ollama/ollama/blob/main/docs/api.md)
+ * direkt per fetch - keine zusätzliche SDK-Abhängigkeit nötig.
+ *
+ * Wirft bei JEDEM Fehler (nicht erreichbar, Timeout, HTTP-Fehlerstatus,
+ * leere/fehlerhafte Antwort) - der Aufrufer fängt das ab und weicht auf
+ * Anthropic Claude aus, siehe generateRouteDescription().
  */
-export async function generateRouteDescription(
-  steps: RouteStep[],
-  targetStreet: string
+async function callOllama(
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[]
 ): Promise<string> {
-  const rawSteps = steps.map((s) => s.instruction);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), config.ollama.timeoutMs);
+  try {
+    const res = await fetch(`${config.ollama.url}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: config.ollama.model,
+        messages,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Ollama-Anfrage fehlgeschlagen (Status ${res.status}).`);
+    }
+    const data = await res.json();
+    const text = data?.message?.content;
+    if (typeof text !== 'string' || !text.trim()) {
+      throw new Error('Ollama hat keine (verwertbare) Textantwort geliefert.');
+    }
+    return text.trim();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
-  type ChatMessage = { role: 'user' | 'assistant'; content: string };
-  const fewShotMessages: ChatMessage[] = routeDescriptionExamples.flatMap((ex) => [
-    { role: 'user', content: buildUserMessage(ex.rawSteps, ex.targetStreet) },
-    { role: 'assistant', content: ex.output },
-  ]);
-
-  const response = await getClient().messages.create({
+/** Ruft Anthropic Claude auf (Rückfallebene) - bisherige Logik, unverändert. */
+async function callAnthropic(messages: FewShotMessage[]): Promise<string> {
+  const response = await getAnthropicClient().messages.create({
     model: config.anthropic.model,
     max_tokens: 400,
     system: SYSTEM_PROMPT,
-    messages: [
-      ...fewShotMessages,
-      { role: 'user', content: buildUserMessage(rawSteps, targetStreet) },
-    ],
+    messages,
   });
 
   const textBlock = response.content.find((b) => b.type === 'text');
@@ -72,4 +110,41 @@ export async function generateRouteDescription(
     throw new Error('Claude hat keine Textantwort geliefert.');
   }
   return textBlock.text.trim();
+}
+
+/**
+ * Übersetzt rohe Routing-Schritte in die kurze deutsche Anfahrtsnotation.
+ * Nutzt Few-Shot-Beispiele aus src/config/routeDescriptionExamples.ts.
+ *
+ * Provider-Reihenfolge: zuerst der eigene/lokale Ollama-Server (siehe
+ * config.ollama), bei jedem Fehler dort (nicht erreichbar, Timeout,
+ * Fehlerantwort) automatischer Rückfall auf Anthropic Claude. Mit
+ * OLLAMA_ENABLED=false lässt sich Ollama komplett überspringen.
+ */
+export async function generateRouteDescription(
+  steps: RouteStep[],
+  targetStreet: string
+): Promise<string> {
+  const rawSteps = steps.map((s) => s.instruction);
+  const fewShotMessages = buildFewShotMessages();
+  const finalUserMessage = { role: 'user' as const, content: buildUserMessage(rawSteps, targetStreet) };
+
+  if (config.ollama.enabled) {
+    try {
+      return await callOllama([
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...fewShotMessages,
+        finalUserMessage,
+      ]);
+    } catch (err) {
+      // Bewusst nur warnen, nicht abbrechen - der Aufrufer bekommt trotzdem
+      // eine Antwort, nur eben von Anthropic statt Ollama.
+      console.warn(
+        '[claude.ts] Ollama fehlgeschlagen, weiche auf Anthropic Claude aus:',
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+
+  return await callAnthropic([...fewShotMessages, finalUserMessage]);
 }
