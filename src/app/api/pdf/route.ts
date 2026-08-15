@@ -4,6 +4,7 @@ import { insertCard, updateCard } from '@/lib/db';
 import type { CardData } from '@/lib/types';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 interface PdfRequestBody extends CardData {
   /** Wenn gesetzt: bestehende gespeicherte Karte aktualisieren statt neu anzulegen */

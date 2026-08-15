@@ -1,6 +1,15 @@
-# Produktions-Setup für den Betrieb auf eigener Hardware (z. B. einem NUC
-# zuhause) - App + automatischer HTTPS-Reverse-Proxy (Caddy). Vollständige
+# Produktions-Setup für den Betrieb auf eigener Hardware mit normalem
+# Docker + docker compose (z. B. ein VPS oder ein NUC mit normalem Linux -
+# NICHT für Home Assistant OS geeignet, siehe HINWEIS unten). App +
+# automatischer HTTPS-Reverse-Proxy (Caddy). Vollständige
 # Schritt-für-Schritt-Anleitung: siehe DEPLOY_NUC.md.
+#
+# HINWEIS für Home Assistant OS (HAOS): HAOS hat kein "docker compose" und
+# meist schon einen eigenen Reverse-Proxy (z. B. Nginx Proxy Manager) auf
+# Port 80/443 laufen. Dort stattdessen direkt per "docker build"/"docker
+# run" deployen (ohne Caddy, stattdessen den vorhandenen Reverse-Proxy für
+# die Domain/das Zertifikat nutzen) - siehe DEPLOY_NUC.md, Abschnitt für
+# Home Assistant OS.
 #
 # Getrennt von docker-compose.yml (das ist NUR für die optionalen eigenen
 # OSRM-/Nominatim-Server, siehe README Schritt 7) - beide Dateien lassen
@@ -13,10 +22,9 @@ services:
     container_name: feuerwehrkarten-app
     restart: unless-stopped
     # Bewusst NUR einzelne Variablen durchreichen (statt "env_file: .env")
-    # und dabei DB_PATH/GENERATED_DIR NICHT übernehmen: die App soll im
-    # Container immer die vom docker-entrypoint.sh gesetzten Pfade unter
-    # /app/persist verwenden (siehe dort), sonst würden gespeicherte Karten
-    # bei jedem Neustart verloren gehen.
+    # und dabei DB_PATH/GENERATED_DIR NICHT übernehmen: deren Standardwerte
+    # (./data/app.db, ./public/generated) passen schon genau zu den unten
+    # gemounteten Volumes - kein Override nötig.
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
@@ -31,7 +39,11 @@ services:
       MAP_LAST_SEGMENT_METERS: ${MAP_LAST_SEGMENT_METERS:-400}
       MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
     volumes:
-      - app-persist:/app/persist
+      # Direkt an den Standard-Pfaden mounten, kein Symlink/Override nötig
+      # (siehe Kommentar im Dockerfile - Next.js liefert public/-Dateien
+      # über einen Symlink hinweg nicht zuverlässig aus).
+      - app-data:/app/data
+      - app-generated:/app/public/generated
     # Kein Port-Mapping zum Host! Die App ist nur innerhalb des
     # Docker-Netzwerks für Caddy erreichbar (Adresse "app:3000") - direkt
     # von außen erreichbar sind nur 80/443 über Caddy (siehe unten).
@@ -55,6 +67,7 @@ services:
       - app
 
 volumes:
-  app-persist:
+  app-data:
+  app-generated:
   caddy-data:
   caddy-config:

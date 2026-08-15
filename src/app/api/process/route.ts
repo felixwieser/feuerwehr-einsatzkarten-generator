@@ -8,6 +8,7 @@ import { config } from '@/lib/config';
 import type { GeoPoint, ProcessResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 interface ProcessRequestBody {
   startpointMode: 'station' | 'custom';

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '@/lib/config';
-import { getBrowser } from '@/lib/browser';
+import { getPdfBrowser } from '@/lib/browser';
 import type { CardData } from '@/lib/types';
 
 // Erzeugt die druckfertige, zweiseitige A5-PDF-Karte (Vorderseite = Text,
@@ -88,7 +88,7 @@ function buildCardHtml(card: CardData): string {
 export async function renderCardPdf(card: CardData): Promise<Buffer> {
   const html = buildCardHtml(card);
 
-  const browser = await getBrowser();
+  const browser = await getPdfBrowser();
   const page = await browser.newPage();
   try {
     // Das Kartenbild ist als data:-URI direkt im HTML eingebettet (siehe

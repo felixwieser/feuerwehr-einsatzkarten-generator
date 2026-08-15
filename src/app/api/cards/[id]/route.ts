@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCard } from '@/lib/db';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /** Lädt eine gespeicherte Karte zur Korrektur/erneutem Export, ohne Neuberechnung. */
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {

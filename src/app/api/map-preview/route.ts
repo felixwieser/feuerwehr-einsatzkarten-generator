@@ -3,6 +3,7 @@ import { generateMapImage } from '@/lib/mapImage';
 import type { RouteSegmentSplit } from '@/lib/types';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // Rendert den Kartenausschnitt NEU mit dem vom Nutzer in der interaktiven
 // Vorschau (siehe MapAdjuster.tsx) gewählten Kartenausschnitt (bounds) -

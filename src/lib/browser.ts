@@ -1,14 +1,27 @@
 import puppeteer, { Browser } from 'puppeteer';
 
-// Ein einzelner, wiederverwendeter Chromium-Prozess für Kartenbild- und
-// PDF-Export (siehe mapImage.ts / pdf.ts). Das Starten von Chromium dauert
-// spürbar - bei jedem Request neu zu starten wäre unnötig langsam.
+// Zwei getrennte, wiederverwendete Chromium-Prozesse - je einer für
+// Kartenbild (mapImage.ts) und PDF-Export (pdf.ts). Das Starten von
+// Chromium dauert spürbar - bei jedem Request neu zu starten wäre unnötig
+// langsam.
+//
+// WARUM ZWEI GETRENNTE INSTANZEN (nicht eine gemeinsame wie ursprünglich):
+// Die WebGL-Software-Rendering-Flags, die MapLibre GL JS für den
+// Kartenausschnitt braucht (s. u.), haben auf manchen Hosts (beobachtet auf
+// einem NUC mit Home Assistant OS) zu einem Segmentation Fault beim
+// PDF-Export (page.pdf()) geführt - vermutlich eine Inkompatibilität
+// zwischen den erzwungenen ANGLE/SwiftShader-Flags und Chromiums
+// PDF-Druck-Pipeline. Der PDF-Export selbst braucht gar kein WebGL (das
+// Kartenbild wird dort nur als fertiges PNG eingebettet), daher startet er
+// jetzt einen eigenen, einfachen Chromium-Prozess ohne diese Flags.
 
-let browserPromise: Promise<Browser> | null = null;
+let mapBrowserPromise: Promise<Browser> | null = null;
+let pdfBrowserPromise: Promise<Browser> | null = null;
 
+/** Für den Kartenausschnitt (mapImage.ts) - braucht Software-WebGL. */
 export function getBrowser(): Promise<Browser> {
-  if (!browserPromise) {
-    browserPromise = puppeteer.launch({
+  if (!mapBrowserPromise) {
+    mapBrowserPromise = puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -28,5 +41,16 @@ export function getBrowser(): Promise<Browser> {
       ],
     });
   }
-  return browserPromise;
+  return mapBrowserPromise;
+}
+
+/** Für den PDF-Export (pdf.ts) - kein WebGL nötig, bewusst schlichte Flags. */
+export function getPdfBrowser(): Promise<Browser> {
+  if (!pdfBrowserPromise) {
+    pdfBrowserPromise = puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+  }
+  return pdfBrowserPromise;
 }
