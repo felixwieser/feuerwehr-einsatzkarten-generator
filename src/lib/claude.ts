@@ -100,13 +100,34 @@ async function callOllama(
 async function callAnthropic(messages: FewShotMessage[]): Promise<string> {
   const response = await getAnthropicClient().messages.create({
     model: config.anthropic.model,
-    max_tokens: 400,
+    // Neuere Claude-Modelle (u.a. Sonnet 5) aktivieren "adaptive thinking"
+    // automatisch, sobald "thinking" NICHT gesetzt wird - und max_tokens ist
+    // dabei ein hartes Gesamtlimit über Thinking- UND Antworttext zusammen.
+    // Bei langen Anfahrtswegen (viele rohe Turn-by-Turn-Schritte) hat das
+    // interne Thinking das knappe Budget von früher (400) komplett
+    // aufgefressen, sodass kein Textblock mehr übrig blieb - daher der
+    // Fehler "Claude hat keine Textantwort geliefert." bei weit entfernten
+    // Zielstraßen. Diese Aufgabe ist reine Formatierung/Übersetzung anhand
+    // von Few-Shot-Beispielen und braucht kein Reasoning, daher hier bewusst
+    // deaktiviert - schneller, günstiger und ohne dieses Truncation-Risiko.
+    thinking: { type: 'disabled' },
+    // Vorher 400 - reichte bei komplexeren/langen Routen (viele Schritte)
+    // nicht mehr aus. Mit deaktiviertem Thinking bräuchte die eigentliche
+    // Textantwort deutlich weniger, aber 1024 gibt zusätzlich Puffer für
+    // ungewöhnlich lange Routen mit vielen nummerierten Abbiegungen.
+    max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages,
   });
 
   const textBlock = response.content.find((b) => b.type === 'text');
   if (!textBlock || textBlock.type !== 'text') {
+    console.warn(
+      '[claude.ts] Keine Textantwort von Claude - stop_reason:',
+      response.stop_reason,
+      'content:',
+      JSON.stringify(response.content)
+    );
     throw new Error('Claude hat keine Textantwort geliefert.');
   }
   return textBlock.text.trim();
