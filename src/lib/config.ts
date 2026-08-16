@@ -38,8 +38,33 @@ export const config = {
     },
     model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
   },
-  osrm: {
-    url: (process.env.OSRM_URL || 'https://router.project-osrm.org').replace(/\/$/, ''),
+  // Routing über openrouteservice (ORS) - ersetzt das frühere OSRM. Nutzt
+  // bewusst das normale "driving-car"-Profil (nicht "driving-hgv"): ein
+  // echtes LKW-Profil vermeidet pauschal Autobahnen/Durchfahrtsbeschränkungen,
+  // die für Einsatzfahrzeuge unter Blaulicht rechtlich gar nicht gelten -
+  // das hat sich beim Testen als spürbarer, unnötiger Zeitverlust gezeigt.
+  // Stattdessen wird die PKW-Route nachträglich gezielt auf ECHTE physische
+  // Engstellen geprüft (siehe checkHeightRestrictions() in routing.ts) und
+  // nur dort, wo nötig, gezielt umgeleitet.
+  ors: {
+    // API-Key unter https://openrouteservice.org/dev/#/signup (kostenlos,
+    // Standard-Plan reicht: 2000 Anfragen/Tag) - lazy per required(),
+    // analog zu anthropic.apiKey.
+    get apiKey() {
+      return required('ORS_API_KEY');
+    },
+    url: (process.env.ORS_URL || 'https://api.openrouteservice.org').replace(/\/$/, ''),
+  },
+  // Maße des größten Fahrzeugs, für das die Anfahrt geplant wird (z. B.
+  // Feuerwehr-Fahrzeug) - wird NUR für die Durchfahrtshöhen-Prüfung an
+  // Unterführungen/Brücken genutzt (siehe routing.ts). Bewusst KEINE
+  // Gewichtsprüfung: Gewichtsbeschränkungen sind i. d. R. Verkehrszeichen
+  // (Durchfahrtsverbote), keine physischen Grenzen, und gelten für
+  // Einsatzfahrzeuge unter Blaulicht ohnehin nicht - anders als eine zu
+  // niedrige Unterführung, die man auch mit Blaulicht nicht "wegdiskutieren"
+  // kann.
+  vehicle: {
+    heightM: Number(process.env.VEHICLE_HEIGHT_M || 3.3),
   },
   nominatim: {
     url: (process.env.NOMINATIM_URL || 'https://nominatim.openstreetmap.org').replace(

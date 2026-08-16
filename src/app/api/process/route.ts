@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { geocode, reverseGeocodeDistrict, shortStreetLabel } from '@/lib/nominatim';
-import { getRoute, splitLastSegment } from '@/lib/osrm';
+import { getRoute, splitLastSegment } from '@/lib/routing';
 import { generateRouteDescription } from '@/lib/claude';
 import { generateMapImage } from '@/lib/mapImage';
 import { getStationById } from '@/config/stations';
@@ -118,8 +118,11 @@ export async function POST(req: NextRequest) {
       } satisfies ProcessResult);
     }
 
-    // 1. Route ermitteln
-    const route = await getRoute(start, target);
+    // 1. Route ermitteln (stationId für ggf. bekannte Abkürzungen ab dieser
+    //    Wache, siehe src/config/knownShortcuts.ts)
+    const route = await getRoute(start, target, {
+      stationId: body.startpointMode === 'station' ? body.stationId : undefined,
+    });
     if (!route) {
       return NextResponse.json({
         status: 'error',
