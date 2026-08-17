@@ -42,11 +42,18 @@ export const knownShortcuts: KnownShortcut[] = [
   {
     id: 'fw4-schwere-reiter-str',
     description:
-      'Ab Feuerwache 4 Richtung Norden: li. auf Heßstr., dann auf die ' +
-      'Schwere-Reiter-Str. (li. oder re. je nach genauer Zielrichtung) - ' +
-      'laut Felix nur bei Zielen nördlich der Wache sinnvoll.',
+      'Ab Feuerwache 4: auf Heßstr., dann auf die Schwere-Reiter-Str. ' +
+      '(li. oder re. je nach genauer Zielrichtung) - laut Felix NICHT nur ' +
+      'bei Zielen nördlich der Wache sinnvoll (Testfall Waisenhausstr., ' +
+      'West-Nordwest, sollte die Abkürzung ebenfalls nutzen) - der starre ' +
+      'Richtungs-Filter wurde deshalb entfernt, der Zeitvergleich unten ' +
+      'entscheidet jetzt allein. ACHTUNG: viaPoint zeigt aktuell auf die ' +
+      'Adresse "Schwere-Reiter-Str. 2", nicht auf die exakte Abbiege-Ecke ' +
+      'Heßstr./Schwere-Reiter-Str. - dadurch fährt die erzwungene Route im ' +
+      'Test einen unnötigen Umweg (über Lothstr./Dachauer Str. statt ' +
+      'direkt) und wird deshalb meist als "nicht schneller" verworfen. ' +
+      'Sobald Felix die genaue Ecken-Koordinate liefert, hier ersetzen.',
     appliesWhen: { stationId: 'fw4' },
-    directionFromStart: 'north',
     viaPoint: { lat: 48.160587, lon: 11.549806 }, // Schwere-Reiter-Str. 2, 80637 München
   },
   {
