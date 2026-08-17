@@ -186,6 +186,28 @@ function allSteps(feature: OrsFeature): OrsStep[] {
   return feature.properties.segments.flatMap((seg) => seg.steps);
 }
 
+/**
+ * true, wenn dieselbe benannte Straße an zwei NICHT direkt aufeinander-
+ * folgenden Stellen der Route auftaucht - ein starkes Anzeichen für einen
+ * unsinnigen Rückweg/Umweg (z. B. durch einen erzwungenen Via-Punkt, der
+ * an einer für die konkrete Zielrichtung ungünstigen Stelle liegt - siehe
+ * Kommentar bei der Verwendung in getRoute()). Ein reiner Zeitvergleich
+ * allein erkennt so etwas nicht zuverlässig, da ein Umweg auf dem Papier
+ * trotzdem knapp "schneller" sein kann.
+ */
+function hasBacktrackingStreetRevisit(feature: OrsFeature): boolean {
+  const seen = new Set<string>();
+  let lastStreet: string | null = null;
+  for (const s of allSteps(feature)) {
+    const street = s.name === '-' ? null : s.name;
+    if (!street || street === lastStreet) continue;
+    if (seen.has(street)) return true;
+    seen.add(street);
+    lastStreet = street;
+  }
+  return false;
+}
+
 // -----------------------------------------------------------------------
 // "Große Straßen zuerst" - für Kolonnenfahrten ist der Streckenanfang auf
 // größeren Straßen leichter zu fahren als auf engen Nebenstraßen. ORS bietet
@@ -592,13 +614,30 @@ export async function getRoute(
 
   if (feature && shortcutFeature) {
     // Bekannte Abkürzung nur verwenden, wenn sie nicht langsamer ist als
-    // die normal berechnete Route (siehe knownShortcuts.ts).
-    if (routeDurationSeconds(shortcutFeature) <= routeDurationSeconds(feature)) {
+    // die normal berechnete Route (siehe knownShortcuts.ts) UND keinen
+    // Rückweg über eine bereits befahrene Straße erzeugt. Der erzwungene
+    // Via-Punkt liegt an einer festen Stelle - für Ziele, die "auf der
+    // anderen Seite" davon liegen, kann das sonst einen unsinnigen Umweg
+    // erzeugen, der auf dem Papier (Gesamtdauer) trotzdem knapp gewinnt
+    // (beobachtet: Leonrodstr. wurde zweimal befahren, weil die normale
+    // Route den Via-Punkt bereits über Platz der Freiheit erreicht hätte,
+    // der Via-Punkt aber am westlichen Ende bei Rotkreuzplatz liegt).
+    if (
+      routeDurationSeconds(shortcutFeature) <= routeDurationSeconds(feature) &&
+      !hasBacktrackingStreetRevisit(shortcutFeature)
+    ) {
       winner = shortcutFeature;
       usedCoords = shortcutCoords!;
     }
   } else if (!feature && shortcutFeature) {
-    // Normale Route nicht gefunden - Abkürzungs-Route als letzten Versuch nutzen
+    // Normale Route nicht gefunden - Abkürzungs-Route als letzten Versuch
+    // nutzen, auch falls sie einen Rückweg enthält (siehe oben) - eine
+    // ungewöhnliche Route ist immer noch besser als gar keine.
+    if (hasBacktrackingStreetRevisit(shortcutFeature)) {
+      console.warn(
+        '[routing.ts] Abkürzungs-Route enthält einen Rückweg, wird aber mangels Alternative trotzdem verwendet.'
+      );
+    }
     winner = shortcutFeature;
     usedCoords = shortcutCoords!;
   }
