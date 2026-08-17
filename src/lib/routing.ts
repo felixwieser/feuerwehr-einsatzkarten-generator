@@ -305,37 +305,49 @@ interface HeightRestriction {
 // erreichbar ist (kam beim Testen tatsächlich vor).
 const OVERPASS_URLS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 
+/**
+ * Fragt BEIDE Overpass-Server gleichzeitig ab (nicht nacheinander) und
+ * nutzt die erste erfolgreiche Antwort - spürbar schneller als ein
+ * sequentieller Fallback, besonders wenn ein Server gerade überlastet ist
+ * (Timeout statt schneller Fehlerantwort). Ein gemeinsames Zeitlimit für
+ * beide zusammen (nicht pro Server), damit ein hängender Server die
+ * Gesamtwartezeit nicht verdoppelt.
+ */
 async function fetchOverpass(query: string): Promise<any> {
-  let lastError: unknown;
-  for (const url of OVERPASS_URLS) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          // Ohne expliziten Accept-Header antwortet Overpass Node/undici-
-          // Anfragen mit 406 (Content-Negotiation schlägt fehl) - mit curl
-          // (eigener Accept-Header/User-Agent) tritt das nicht auf.
-          Accept: '*/*',
-          'User-Agent': 'einsatzkarten-generator/1.0 (' + (config.nominatim.contactEmail || 'kontakt fehlt') + ')',
-        },
-        body: 'data=' + encodeURIComponent(query),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        throw new Error(`Overpass-Anfrage an ${url} fehlgeschlagen (Status ${res.status}).`);
-      }
-      return await res.json();
-    } catch (err) {
-      lastError = err;
-      console.warn(`[routing.ts] Overpass-Server ${url} nicht erreichbar, versuche nächsten:`, err);
-    } finally {
-      clearTimeout(timeoutId);
-    }
+  const controller = new AbortController();
+  // Bewusst knapp (nicht z. B. 15s) - ist Overpass gerade überlastet, soll
+  // die Kartenerstellung nicht unnötig lange darauf warten (die Höhen-
+  // prüfung ist ein Sicherheitsnetz, kein Pflichtschritt, siehe
+  // avoidHeightRestrictions()). Ein normal antwortender Server braucht
+  // dafür üblicherweise nur 1-3s.
+  const timeoutId = setTimeout(() => controller.abort(), 7000);
+  const body = 'data=' + encodeURIComponent(query);
+  const headers = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    // Ohne expliziten Accept-Header antwortet Overpass Node/undici-Anfragen
+    // mit 406 (Content-Negotiation schlägt fehl) - mit curl (eigener
+    // Accept-Header/User-Agent) tritt das nicht auf.
+    Accept: '*/*',
+    'User-Agent': 'einsatzkarten-generator/1.0 (' + (config.nominatim.contactEmail || 'kontakt fehlt') + ')',
+  };
+
+  try {
+    return await Promise.any(
+      OVERPASS_URLS.map(async (url) => {
+        const res = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+        if (!res.ok) {
+          throw new Error(`Overpass-Anfrage an ${url} fehlgeschlagen (Status ${res.status}).`);
+        }
+        return res.json();
+      })
+    );
+  } catch (err) {
+    const detail =
+      err instanceof AggregateError ? err.errors.map((e) => String(e)).join('; ') : String(err);
+    throw new Error(`Alle Overpass-Server nicht erreichbar: ${detail}`);
+  } finally {
+    clearTimeout(timeoutId);
   }
-  throw lastError instanceof Error ? lastError : new Error('Alle Overpass-Server nicht erreichbar.');
 }
 
 /**
@@ -416,17 +428,22 @@ const HEIGHT_RESTRICTION_PROXIMITY_METERS = 20;
  * oben). Bricht nach MAX_HEIGHT_AVOIDANCE_ATTEMPTS Versuchen ab und nutzt
  * dann die letzte gefundene Route (besser eine mit bekannter Engstelle als
  * gar keine Karte) - das wird klar geloggt.
+ *
+ * Performance: Overpass wird nur EINMAL abgefragt (großzügig gepuffertes
+ * Gebiet um die ursprüngliche Route), nicht erneut bei jedem Umleitungs-
+ * versuch - Umleitungen sind ohnehin nur kleine lokale Ausweichmanöver um
+ * eine einzelne Engstelle, die bleiben fast immer innerhalb desselben
+ * Gebiets. Spart bis zu zwei zusätzliche Overpass-Anfragen pro Karte.
  */
 async function avoidHeightRestrictions(
   feature: OrsFeature,
-  coordinates: [number, number][],
-  knownConflicts: HeightRestriction[] = [],
-  attempt = 1
+  coordinates: [number, number][]
 ): Promise<OrsFeature> {
-  const bbox = bboxOfLine(feature.geometry.coordinates, 0.005);
   let restrictions: HeightRestriction[];
   try {
-    restrictions = await fetchHeightRestrictions(bbox);
+    // Größerer Puffer als früher (0.01 statt 0.005 Grad), da diese eine
+    // Abfrage jetzt auch etwaige spätere Umleitungen mit abdecken muss.
+    restrictions = await fetchHeightRestrictions(bboxOfLine(feature.geometry.coordinates, 0.01));
   } catch (err) {
     // Overpass nicht erreichbar o. ä. - die Höhenprüfung ist ein
     // zusätzliches Sicherheitsnetz, kein Ersatz für die normale Route.
@@ -439,6 +456,17 @@ async function avoidHeightRestrictions(
     return feature;
   }
 
+  return applyHeightAvoidance(feature, coordinates, restrictions, [], 1);
+}
+
+/** Prüft `feature` gegen die (bereits geladenen) `restrictions` und weicht bei Bedarf rekursiv aus - ohne erneute Overpass-Anfrage. */
+async function applyHeightAvoidance(
+  feature: OrsFeature,
+  coordinates: [number, number][],
+  restrictions: HeightRestriction[],
+  knownConflicts: HeightRestriction[],
+  attempt: number
+): Promise<OrsFeature> {
   const routeLine = feature.geometry.coordinates;
   const newConflicts = restrictions.filter(
     (r) =>
@@ -479,7 +507,7 @@ async function avoidHeightRestrictions(
     );
     return feature;
   }
-  return avoidHeightRestrictions(rerouted, coordinates, allConflicts, attempt + 1);
+  return applyHeightAvoidance(rerouted, coordinates, restrictions, allConflicts, attempt + 1);
 }
 
 // -----------------------------------------------------------------------
@@ -517,8 +545,25 @@ function featureToRouteResult(feature: OrsFeature): RouteResult {
 export async function getRoute(
   start: GeoPoint,
   end: GeoPoint,
-  opts?: { stationId?: string }
+  opts?: { stationId?: string; routeStartOverride?: { lat: number; lon: number } }
 ): Promise<RouteResult | null> {
+  // Manuell von der Diensthabenden Person gewählte Ausfahrtsrichtung (siehe
+  // Station.exitOptions in stations.ts) - der Abschnitt von der Wache bis
+  // hierher ist bereits als Fixtext hinterlegt (siehe api/process/route.ts)
+  // und wird NICHT berechnet. Die Routing-Engine startet direkt ab hier,
+  // ganz normal inkl. Höhenprüfung - kein Zeitvergleich nötig, da die Wahl
+  // schon getroffen ist.
+  if (opts?.routeStartOverride) {
+    const coords: [number, number][] = [
+      [opts.routeStartOverride.lon, opts.routeStartOverride.lat],
+      [end.lon, end.lat],
+    ];
+    let feature = await requestOrsRoute(coords);
+    if (!feature) return null;
+    feature = await avoidHeightRestrictions(feature, coords);
+    return featureToRouteResult(feature);
+  }
+
   const baseCoords: [number, number][] = [
     [start.lon, start.lat],
     [end.lon, end.lat],
@@ -529,31 +574,40 @@ export async function getRoute(
     ? [[start.lon, start.lat], ...shortcutViaPoints.map((v): [number, number] => [v.lon, v.lat]), [end.lon, end.lat]]
     : null;
 
-  let feature = await requestBaseRoute(baseCoords);
+  // Basis-Route und (falls zutreffend) Abkürzungs-Route sind voneinander
+  // unabhängige ORS-Anfragen - parallel statt nacheinander abfragen, das
+  // spart eine komplette Anfrage-Rundlaufzeit.
+  const [feature, shortcutFeature] = await Promise.all([
+    requestBaseRoute(baseCoords),
+    shortcutCoords
+      ? requestOrsRoute(shortcutCoords).catch((err) => {
+          console.warn('[routing.ts] Bekannte Abkürzung fehlgeschlagen, nutze normale Route:', err);
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
+
+  let winner = feature;
   let usedCoords = baseCoords;
 
-  if (feature && shortcutCoords) {
-    const shortcutFeature = await requestOrsRoute(shortcutCoords).catch((err) => {
-      console.warn('[routing.ts] Bekannte Abkürzung fehlgeschlagen, nutze normale Route:', err);
-      return null;
-    });
+  if (feature && shortcutFeature) {
     // Bekannte Abkürzung nur verwenden, wenn sie nicht langsamer ist als
     // die normal berechnete Route (siehe knownShortcuts.ts).
-    if (shortcutFeature && routeDurationSeconds(shortcutFeature) <= routeDurationSeconds(feature)) {
-      feature = shortcutFeature;
-      usedCoords = shortcutCoords;
+    if (routeDurationSeconds(shortcutFeature) <= routeDurationSeconds(feature)) {
+      winner = shortcutFeature;
+      usedCoords = shortcutCoords!;
     }
-  } else if (!feature && shortcutCoords) {
+  } else if (!feature && shortcutFeature) {
     // Normale Route nicht gefunden - Abkürzungs-Route als letzten Versuch nutzen
-    feature = await requestOrsRoute(shortcutCoords);
-    usedCoords = shortcutCoords;
+    winner = shortcutFeature;
+    usedCoords = shortcutCoords!;
   }
 
-  if (!feature) return null;
+  if (!winner) return null;
 
-  feature = await avoidHeightRestrictions(feature, usedCoords);
+  winner = await avoidHeightRestrictions(winner, usedCoords);
 
-  return featureToRouteResult(feature);
+  return featureToRouteResult(winner);
 }
 
 /**

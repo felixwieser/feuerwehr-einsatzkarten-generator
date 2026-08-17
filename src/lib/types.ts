@@ -2,6 +2,35 @@
 // React/Next, damit alle Typen auch von reinen Backend-Funktionen
 // (Routing, Geocoding, PDF-Export etc.) genutzt werden können.
 
+/**
+ * Manuell wählbare Ausfahrtsrichtung ab einer Wache (siehe InputPanel.tsx
+ * und Station.exitOptions unten). Für Fälle, in denen der direkte Weg für
+ * normale Fahrzeuge gesperrt ist und nur mit Sondersignal befahren werden
+ * darf - eine Routing-Engine kann so eine Strecke grundsätzlich nicht
+ * selbst berechnen (auch nicht mit einem erzwungenen Zwischenpunkt, da sie
+ * reale Verkehrsbeschränkungen respektiert). Der allererste Abschnitt wird
+ * deshalb NICHT berechnet, sondern als fester Text hinterlegt - die
+ * Diensthabende Person kennt die Lage vor Ort und wählt das selbst.
+ */
+export interface StationExitOption {
+  id: string;
+  /** Beschriftung des Auswahl-Buttons, z. B. "Links (über Schwere-Reiter-Str.)" */
+  label: string;
+  /**
+   * Fest hinterlegter Text für den allerersten Streckenabschnitt (z. B.
+   * "re. Heßstr. – li. Schwere-Reiter-Str.") - wird der KI-generierten
+   * Beschreibung als reiner Text vorangestellt, OHNE von der Routing-
+   * Engine berechnet oder von der KI generiert zu werden.
+   */
+  fixedPrefix: string;
+  /**
+   * Punkt, an dem der fest hinterlegte Abschnitt endet - die normale
+   * Routenberechnung zum Ziel (inkl. Höhenprüfung etc.) beginnt ab hier,
+   * NICHT ab der Wache selbst.
+   */
+  routeStartPoint: { lat: number; lon: number };
+}
+
 export interface Station {
   id: string;
   /** Kurzform, z. B. "FW 4" - erscheint oben rechts auf der Karte */
@@ -11,6 +40,8 @@ export interface Station {
   address: string;
   lat: number;
   lon: number;
+  /** Optional: manuell wählbare Ausfahrtsrichtungen, siehe StationExitOption */
+  exitOptions?: StationExitOption[];
 }
 
 export interface GeoPoint {

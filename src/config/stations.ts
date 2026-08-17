@@ -35,6 +35,26 @@ export const stations: Station[] = [
     address: 'Heßstraße 120, 80797',
     lat: 48.1564,
     lon: 11.5554,
+    // Der direkte Weg re. auf Heßstr. -> li. auf Schwere-Reiter-Str. ist für
+    // normale Fahrzeuge gesperrt (Routing-Engines finden ihn nie von selbst,
+    // auch nicht mit erzwungenem Zwischenpunkt - getestet), aber mit
+    // Sondersignal befahrbar. Der Abschnitt wird daher als Fixtext
+    // hinterlegt statt berechnet - die eigentliche Routenberechnung
+    // beginnt erst ab routeStartPoint (auf der Schwere-Reiter-Str.).
+    exitOptions: [
+      {
+        id: 'links-schwere-reiter-str',
+        label: 'Links (über Schwere-Reiter-Str.)',
+        fixedPrefix: 're. Heßstr. – li. Schwere-Reiter-Str.',
+        // Bewusst NICHT die Adresse "Schwere-Reiter-Str. 2" (zu nah an der
+        // Kreuzung zur Heßstr. - ORS ordnete diesen Punkt beim Testen noch
+        // der Heßstr. zu, wodurch die berechnete Route direkt nach dem
+        // Fixtext wieder "Heßstr." sagte). Dieser Punkt liegt eindeutig
+        // weiter auf der Schwere-Reiter-Str. (getestet: Route ab hier
+        // beginnt sauber mit "Schwere-Reiter-Straße", kein Zurückspringen).
+        routeStartPoint: { lat: 48.1598, lon: 11.5482 },
+      },
+    ],
   },
 ];
 

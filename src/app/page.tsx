@@ -17,6 +17,17 @@ export default function Home() {
   const [selectedStationId, setSelectedStationId] = useState(DEFAULT_STATION_ID);
   const [customStartAddress, setCustomStartAddress] = useState('');
   const [targetStreetInput, setTargetStreetInput] = useState('');
+  // Manuell gewählte Ausfahrtsrichtung ab der Wache (siehe
+  // Station.exitOptions) - null = automatisch/normal berechnete Route.
+  const [exitOptionId, setExitOptionId] = useState<string | null>(null);
+
+  function handleSelectedStationIdChange(id: string) {
+    setSelectedStationId(id);
+    // Ausfahrtsrichtung ist wachenspezifisch - beim Wachenwechsel
+    // zurücksetzen, sonst würde z. B. eine FW4-Auswahl unbemerkt auf einer
+    // anderen Wache "hängen bleiben".
+    setExitOptionId(null);
+  }
 
   // --- Verarbeitungsstatus ---
   const [processing, setProcessing] = useState(false);
@@ -79,6 +90,7 @@ export default function Home() {
           targetStreet: targetStreetInput,
           resolvedStart: overrides?.resolvedStart,
           resolvedTarget: overrides?.resolvedTarget,
+          exitOptionId: exitOptionId ?? undefined,
         }),
       });
       const data: ProcessResult = await res.json();
@@ -214,7 +226,9 @@ export default function Home() {
           startpointMode={startpointMode}
           onStartpointModeChange={setStartpointMode}
           selectedStationId={selectedStationId}
-          onSelectedStationIdChange={setSelectedStationId}
+          onSelectedStationIdChange={handleSelectedStationIdChange}
+          exitOptionId={exitOptionId}
+          onExitOptionIdChange={setExitOptionId}
           customStartAddress={customStartAddress}
           onCustomStartAddressChange={setCustomStartAddress}
           targetStreetInput={targetStreetInput}

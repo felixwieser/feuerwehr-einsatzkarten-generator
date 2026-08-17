@@ -5,7 +5,7 @@ import { generateRouteDescription } from '@/lib/claude';
 import { generateMapImage } from '@/lib/mapImage';
 import { getStationById } from '@/config/stations';
 import { config } from '@/lib/config';
-import type { GeoPoint, ProcessResult } from '@/lib/types';
+import type { GeoPoint, ProcessResult, RouteStep } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +20,9 @@ interface ProcessRequestBody {
   // erneute (u. U. wieder mehrdeutige) Geocoding-Anfrage zu vermeiden.
   resolvedStart?: GeoPoint;
   resolvedTarget?: GeoPoint;
+  // Manuell gewählte Ausfahrtsrichtung ab der Wache (siehe
+  // Station.exitOptions) - referenziert eine StationExitOption.id.
+  exitOptionId?: string;
 }
 
 async function resolveStart(
@@ -119,9 +122,16 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Route ermitteln (stationId für ggf. bekannte Abkürzungen ab dieser
-    //    Wache, siehe src/config/knownShortcuts.ts)
+    //    Wache, siehe src/config/knownShortcuts.ts; exitOption für eine
+    //    manuell gewählte Ausfahrtsrichtung, siehe Station.exitOptions - der
+    //    Abschnitt bis routeStartPoint wird dabei NICHT berechnet, sondern
+    //    unten als Fixtext vorangestellt)
+    const startStation =
+      body.startpointMode === 'station' ? getStationById(body.stationId || '') : undefined;
+    const exitOption = startStation?.exitOptions?.find((o) => o.id === body.exitOptionId);
     const route = await getRoute(start, target, {
       stationId: body.startpointMode === 'station' ? body.stationId : undefined,
+      routeStartOverride: exitOption?.routeStartPoint,
     });
     if (!route) {
       return NextResponse.json({
@@ -130,26 +140,45 @@ export async function POST(req: NextRequest) {
       } satisfies ProcessResult);
     }
 
-    // 2. Klartext-Anfahrtsbeschreibung generieren (Claude)
-    const description = await generateRouteDescription(route.steps, target.label);
+    // Bei manuell gewählter Ausfahrtsrichtung startet route.steps IMMER mit
+    // einem oder mehreren "auf <routeStartPoint-Straße>"-Schritten (z. B.
+    // "Losfahren auf ..." gefolgt von "weiter auf ..."), da die Route exakt
+    // auf dieser Straße beginnt - das ist per Konstruktion dieselbe Straße,
+    // mit der der Fixtext oben schon endet, also eine reine Wiederholung
+    // ("... Schwere-Reiter-Str. – Schwere-Reiter-Str. ..."), die die KI
+    // nicht wegkürzen kann, da sie den Fixtext gar nicht sieht. Daher hier
+    // ALLE führenden Schritte auf derselben (ersten) Straße entfernen.
+    function trimLeadingSameStreetSteps(steps: RouteStep[]) {
+      if (!steps.length || !steps[0].streetName) return steps.slice(1);
+      const startStreet = steps[0].streetName;
+      let i = 0;
+      while (i < steps.length && steps[i].streetName === startStreet) i++;
+      return steps.slice(i);
+    }
+    const stepsForAi = exitOption ? trimLeadingSameStreetSteps(route.steps) : route.steps;
 
-    // 3. Stadtteil ermitteln
-    const district = await reverseGeocodeDistrict(target.lat, target.lon);
-
-    // 4. Kartenausschnitt erzeugen (Anfahrtsweg/Zielstraße-Split dient nur
-    //    noch der automatischen Ausschnitt-Berechnung, keine Einfärbung mehr)
+    // 2.-4. sind voneinander unabhängig (alle nur von route/target abhängig,
+    // nicht von einander) - parallel statt nacheinander abfragen spart
+    // spürbar Zeit (Claude-Aufruf + Kartenbild-Rendern sind beide die
+    // langsamsten Einzelschritte der ganzen Verarbeitung).
     const routeSegments = splitLastSegment(route.geometry, route.targetStreetStartCoord);
-    const mapImagePath = await generateMapImage({
-      targetLat: target.lat,
-      targetLon: target.lon,
-      routeApproach: routeSegments.approach,
-      routeTargetStreet: routeSegments.targetStreet,
-    });
+    const [aiDescription, district, mapImagePath] = await Promise.all([
+      generateRouteDescription(stepsForAi, target.label),
+      reverseGeocodeDistrict(target.lat, target.lon),
+      generateMapImage({
+        targetLat: target.lat,
+        targetLon: target.lon,
+        routeApproach: routeSegments.approach,
+        routeTargetStreet: routeSegments.targetStreet,
+      }),
+    ]);
 
-    const stationLabel =
-      body.startpointMode === 'station'
-        ? getStationById(body.stationId || '')?.kuerzel || ''
-        : '';
+    // Fixtext der gewählten Ausfahrtsrichtung (falls vorhanden) der
+    // KI-generierten Beschreibung voranstellen - reine Textverkettung,
+    // ohne KI/Routing-Beteiligung (siehe Station.exitOptions).
+    const description = exitOption ? `${exitOption.fixedPrefix} – ${aiDescription}` : aiDescription;
+
+    const stationLabel = startStation?.kuerzel || '';
 
     return NextResponse.json({
       status: 'ok',

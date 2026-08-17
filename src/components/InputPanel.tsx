@@ -12,6 +12,9 @@ interface InputPanelProps {
   onStartpointModeChange: (mode: 'station' | 'custom') => void;
   selectedStationId: string;
   onSelectedStationIdChange: (id: string) => void;
+  /** Manuell gewählte Ausfahrtsrichtung ab der Wache (siehe Station.exitOptions), null = automatisch */
+  exitOptionId: string | null;
+  onExitOptionIdChange: (id: string | null) => void;
   customStartAddress: string;
   onCustomStartAddressChange: (v: string) => void;
   targetStreetInput: string;
@@ -82,6 +85,50 @@ export default function InputPanel(props: InputPanelProps) {
           />
         )}
       </div>
+
+      {/* --- Ausfahrtsrichtung (nur bei Wachen mit exitOptions, z. B. FW4) --- */}
+      {props.startpointMode === 'station' &&
+        (() => {
+          const selectedStation = props.stations.find((s) => s.id === props.selectedStationId);
+          const exitOptions = selectedStation?.exitOptions;
+          if (!exitOptions?.length) return null;
+          return (
+            <div>
+              <label className="block text-sm font-medium mb-1">Ausfahrtsrichtung</label>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => props.onExitOptionIdChange(null)}
+                  className={`px-3 py-1.5 rounded-md text-sm border ${
+                    props.exitOptionId === null
+                      ? 'bg-gray-900 text-white border-gray-900'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Automatisch
+                </button>
+                {exitOptions.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => props.onExitOptionIdChange(o.id)}
+                    className={`px-3 py-1.5 rounded-md text-sm border ${
+                      props.exitOptionId === o.id
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Nur nötig, wenn die Standard-Route hier nicht der bekannten, mit Sondersignal
+                befahrbaren Abkürzung entspricht.
+              </p>
+            </div>
+          );
+        })()}
 
       {/* --- Zielstraße --- */}
       <div>
