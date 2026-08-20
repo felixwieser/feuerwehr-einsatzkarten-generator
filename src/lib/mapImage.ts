@@ -261,9 +261,6 @@ async function buildMapInBrowser(opts: {
     }
   }
 
-  // Ziel-Marker
-  new maplibregl.Marker({ color: '#e5352b' }).setLngLat([opts.targetLon, opts.targetLat]).addTo(map);
-
   // Warten, bis alle sichtbaren Kacheln fertig geladen/gerendert sind -
   // ebenfalls mit Timeout als Absicherung.
   await new Promise<void>((resolve, reject) => {
