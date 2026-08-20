@@ -553,6 +553,10 @@ function featureToRouteResult(feature: OrsFeature): RouteResult {
     // müssen wir den nicht mehr selbst aus dem rohen Manöver zusammenbauen.
     instruction: s.instruction,
     streetName: s.name === '-' ? '' : s.name,
+    // Numerischer Manöver-Code + Distanz - werden für die regelbasierte
+    // Klartext-Erzeugung genutzt (siehe deterministicDescription.ts).
+    maneuverType: s.type,
+    distanceMeters: s.distance,
   }));
 
   return {

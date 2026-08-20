@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { geocode, reverseGeocodeDistrict, shortStreetLabel } from '@/lib/nominatim';
 import { getRoute, splitLastSegment } from '@/lib/routing';
 import { generateRouteDescription } from '@/lib/claude';
+import { buildDeterministicDescription } from '@/lib/deterministicDescription';
 import { generateMapImage } from '@/lib/mapImage';
 import { getStationById } from '@/config/stations';
 import { config } from '@/lib/config';
@@ -155,7 +156,16 @@ export async function POST(req: NextRequest) {
       while (i < steps.length && steps[i].streetName === startStreet) i++;
       return steps.slice(i);
     }
-    const stepsForAi = exitOption ? trimLeadingSameStreetSteps(route.steps) : route.steps;
+    const stepsForDescription = exitOption ? trimLeadingSameStreetSteps(route.steps) : route.steps;
+
+    // Regelbasiert (kostenlos, kein Halluzinations-Risiko) oder KI-gestützt
+    // (Standard, bestes Textgefühl) - umschaltbar über DESCRIPTION_MODE,
+    // siehe config.ts/deterministicDescription.ts.
+    const generateDescription =
+      config.textGeneration.mode === 'deterministic'
+        ? async (steps: RouteStep[], targetLabel: string) =>
+            buildDeterministicDescription(steps, targetLabel)
+        : generateRouteDescription;
 
     // 2.-4. sind voneinander unabhängig (alle nur von route/target abhängig,
     // nicht von einander) - parallel statt nacheinander abfragen spart
@@ -163,7 +173,7 @@ export async function POST(req: NextRequest) {
     // langsamsten Einzelschritte der ganzen Verarbeitung).
     const routeSegments = splitLastSegment(route.geometry, route.targetStreetStartCoord);
     const [aiDescription, district, mapImagePath] = await Promise.all([
-      generateRouteDescription(stepsForAi, target.label),
+      generateDescription(stepsForDescription, target.label),
       reverseGeocodeDistrict(target.lat, target.lon),
       generateMapImage({
         targetLat: target.lat,

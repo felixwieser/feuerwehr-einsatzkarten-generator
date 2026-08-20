@@ -13,6 +13,19 @@ function required(name: string): string {
 }
 
 export const config = {
+  // Wie die Klartext-Anfahrtsbeschreibung erzeugt wird:
+  // - "ai" (Standard): KI-Übersetzung, siehe claude.ts (Ollama + Anthropic-
+  //   Rückfallebene, siehe ollama/anthropic unten). Bestes Textgefühl,
+  //   kostet aber (wenn auf Anthropic zurückgefallen wird) etwas pro Karte.
+  // - "deterministic": regelbasiert ohne KI, siehe
+  //   deterministicDescription.ts. Kostenlos, kein Halluzinations-Risiko
+  //   (nichts wird erfunden), aber ein paar Feinheiten (z. B. benannte
+  //   Kreuzungen wie "am Isartorplatz") fehlen - siehe Kommentar dort.
+  textGeneration: {
+    mode: (process.env.DESCRIPTION_MODE === 'deterministic' ? 'deterministic' : 'ai') as
+      | 'ai'
+      | 'deterministic',
+  },
   // Primärer LLM-Provider für die Anfahrtsbeschreibung: ein lokaler/eigener
   // Ollama-Server. Schlägt die Anfrage dort fehl (nicht erreichbar, Timeout,
   // Fehlerantwort), weicht generateRouteDescription() automatisch auf

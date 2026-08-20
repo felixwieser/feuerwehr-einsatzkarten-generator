@@ -63,6 +63,18 @@ export interface RouteStep {
   /** Roher, englischsprachiger Anweisungstext (Basis für die KI-Übersetzung) */
   instruction: string;
   streetName: string;
+  /**
+   * Numerischer ORS-Manöver-Code (siehe openrouteservice-Doku
+   * "Instruction Types"): 0=links, 1=rechts, 2=scharf links, 3=scharf
+   * rechts, 4=leicht links, 5=leicht rechts, 6=geradeaus, 7=Kreisverkehr
+   * einfahren, 8=Kreisverkehr verlassen, 9=wenden, 10=Ziel, 11=Start,
+   * 12=links halten, 13=rechts halten. Wird für die regelbasierte
+   * Klartext-Erzeugung genutzt (siehe deterministicDescription.ts) - die
+   * KI-Variante (claude.ts) nutzt stattdessen den rohen instruction-Text.
+   */
+  maneuverType: number;
+  /** Länge dieses Roh-Schritts in Metern - für die Nummerierung "kurz hintereinander" (deterministicDescription.ts) */
+  distanceMeters: number;
 }
 
 export interface RouteResult {
