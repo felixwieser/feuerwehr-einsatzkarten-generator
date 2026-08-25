@@ -9,28 +9,21 @@ ermittelt den Stadtteil und erzeugt eine druckfertige, zweiseitige PDF-Karte
 Diese Anleitung ist für Nicht-Programmierer geschrieben – folgt einfach den Schritten von oben
 nach unten.
 
-> **Hinweis zu diesem Projekt:** Der Code wurde vollständig erstellt, konnte aber in der
-> Umgebung, in der er entstanden ist, nicht selbst installiert/getestet werden (dort waren
-> weder Node.js noch Docker verfügbar). Führt daher bitte alle Schritte unten sorgfältig aus
-> und meldet euch, falls beim ersten Start Fehler auftreten – die lassen sich in der Regel
-> schnell beheben.
-
 ---
 
 ## Inhaltsverzeichnis
 
 1. [Was ihr vorher installieren müsst](#1-was-ihr-vorher-installieren-müsst)
-2. [Anthropic-API-Key besorgen (Pflicht)](#2-anthropic-api-key-besorgen-pflicht)
+2. [API-Key besorgen (Pflicht)](#2-api-key-besorgen-pflicht)
 3. [Projekt einrichten](#3-projekt-einrichten)
-4. [Schnellstart (ohne eigene Server, mit Demo-Servern)](#4-schnellstart-ohne-eigene-server-mit-demo-servern)
-5. [App starten](#5-app-starten)
-6. [Bedienung](#6-bedienung)
-7. [Eigene Routing-/Geocoding-Server einrichten (optional, aber empfohlen)](#7-eigene-routing--geocoding-server-einrichten-optional-aber-empfohlen)
-8. [Eure Feuerwachen eintragen](#8-eure-feuerwachen-eintragen)
-9. [Beispieltexte für die KI anpassen](#9-beispieltexte-für-die-ki-anpassen)
-10. [Wo landen die Daten?](#10-wo-landen-die-daten)
-11. [Häufige Probleme](#11-häufige-probleme)
-12. [App online stellen (eigene Domain)](#12-app-online-stellen-eigene-domain)
+4. [App starten](#4-app-starten)
+5. [Bedienung](#5-bedienung)
+6. [Klartext-Erzeugung: regelbasiert oder KI](#6-klartext-erzeugung-regelbasiert-oder-ki)
+7. [Wachen, Ausfahrtsrichtungen und Abkürzungen verwalten](#7-wachen-ausfahrtsrichtungen-und-abkürzungen-verwalten)
+8. [Eigenen Nominatim-Server einrichten (optional)](#8-eigenen-nominatim-server-einrichten-optional)
+9. [Wo landen die Daten?](#9-wo-landen-die-daten)
+10. [Häufige Probleme](#10-häufige-probleme)
+11. [App online stellen (eigene Domain)](#11-app-online-stellen-eigene-domain)
 
 ---
 
@@ -45,22 +38,23 @@ nach unten.
   ```
   Es sollten Versionsnummern erscheinen (z. B. `v20.x.x`).
 
-- **Docker Desktop** – nur nötig, wenn ihr eigene Routing-/Geocoding-Server betreiben wollt
-  (Schritt 7, empfohlen für den späteren Dauerbetrieb). Für den ersten Test (Schritt 4) ist
-  Docker **nicht** nötig. Download: https://www.docker.com/products/docker-desktop/
+- **Docker Desktop** – nur nötig, wenn ihr einen eigenen Nominatim-Server (Adresssuche)
+  betreiben wollt (Schritt 8, optional). Für den normalen Betrieb ist Docker **nicht** nötig.
+  Download: https://www.docker.com/products/docker-desktop/
 
-## 2. Anthropic-API-Key besorgen (Pflicht)
+## 2. API-Key besorgen (Pflicht)
 
-Die App nutzt Claude (von Anthropic), um aus den rohen Routendaten die kurze
-Anfahrtsbeschreibung zu formulieren. Dafür braucht ihr einen API-Key:
+Die App nutzt **openrouteservice (ORS)** für die Routenberechnung – dafür ist immer ein
+API-Key nötig, es gibt (anders als früher mit OSRM) keinen anonymen Demo-Server mehr:
 
-1. Geht auf https://console.anthropic.com/ und legt einen Account an (falls noch nicht
-   vorhanden).
-2. Hinterlegt dort unter "Billing" eine Zahlungsmethode und ladet etwas Guthaben auf
-   (die Kosten pro erstellter Karte sind sehr gering, siehe dortige Preisliste).
-3. Geht zu "API Keys" → "Create Key" und kopiert den erzeugten Schlüssel
-   (beginnt mit `sk-ant-...`). **Diesen Schlüssel bekommt niemand außer euch zu sehen –
-   er landet nur in eurer lokalen `.env`-Datei, nie im Programmcode.**
+1. Geht auf https://openrouteservice.org/dev/#/signup und legt einen kostenlosen Account an.
+2. Der kostenlose Standard-Plan reicht für den normalen Betrieb (2000 Anfragen/Tag).
+3. Erzeugt einen API-Key und kopiert ihn.
+
+> **Für die Klartext-Anfahrtsbeschreibung** braucht ihr standardmäßig **keinen** weiteren
+> Key – die App formuliert den Text ohne KI (siehe [Schritt 6](#6-klartext-erzeugung-regelbasiert-oder-ki)).
+> Nur wenn ihr die optionale KI-Variante nutzen wollt, kommt dort noch ein
+> Anthropic-API-Key dazu.
 
 ## 3. Projekt einrichten
 
@@ -81,19 +75,11 @@ cp .env.example .env
 ```
 
 Öffnet die neue Datei `.env` in einem Texteditor und tragt mindestens euren
-`ANTHROPIC_API_KEY` aus Schritt 2 ein. Der Rest kann für den ersten Test unverändert bleiben.
+`ORS_API_KEY` aus Schritt 2 ein. Der Rest kann für den ersten Test unverändert bleiben
+(Standardeinstellung ist die kostenlose, regelbasierte Klartext-Erzeugung ohne KI-Key –
+siehe Schritt 6).
 
-## 4. Schnellstart (ohne eigene Server, mit Demo-Servern)
-
-Standardmäßig ist die App so eingestellt, dass sie die **öffentlichen Demo-Server** von OSRM
-(Routing) und Nominatim (Adresssuche) nutzt. Damit könnt ihr sofort loslegen, ohne Docker
-einzurichten. Diese Demo-Server sind aber laut deren Nutzungsbedingungen nur für **geringes
-Volumen/Tests** gedacht – für den echten Dauerbetrieb solltet ihr Schritt 7 (eigene Server)
-durchführen.
-
-Weiter mit [Schritt 5 – App starten](#5-app-starten).
-
-## 5. App starten
+## 4. App starten
 
 ```bash
 npm run dev
@@ -110,22 +96,22 @@ Zum Beenden im Terminal `Strg+C` drücken.
 > npm run start
 > ```
 
-## 6. Bedienung
+## 5. Bedienung
 
 1. **Startpunkt** wählen: entweder eine eurer hinterlegten Feuerwachen aus der Liste, oder
    über "andere Adresse eingeben…" eine beliebige Adresse.
 2. **Zielstraße** eingeben (am besten mit Ort, z. B. "Marienplatz, München", damit die
    Adresssuche eindeutig ist).
-3. Auf **Start** klicken. Die App ermittelt jetzt automatisch die Route, lässt die
-   Anfahrtsbeschreibung von der KI formulieren, ermittelt den Stadtteil und erzeugt den
-   Kartenausschnitt – das dauert je nach Server-Antwortzeiten ein paar Sekunden, eine
-   Ladeanzeige zeigt euch, dass gearbeitet wird.
+3. Auf **Start** klicken. Die App ermittelt jetzt automatisch die Route, formuliert die
+   Anfahrtsbeschreibung, ermittelt den Stadtteil und erzeugt den Kartenausschnitt – das
+   dauert je nach Server-Antwortzeiten ein paar Sekunden, eine Ladeanzeige zeigt euch, dass
+   gearbeitet wird.
 4. Ist die Zielstraße oder Startadresse **mehrdeutig** (z. B. gibt es "Bahnhofstraße" mehrfach
    in der Region), zeigt euch die App eine Auswahlliste der Treffer an – einfach den
    richtigen anklicken.
 5. Nach der Verarbeitung erscheinen die Felder **Feuerwache**, **Stadtteil** und
    **Anfahrtsbeschreibung** – automatisch befüllt, aber frei editierbar. Passt sie bei Bedarf
-   an (z. B. wenn die KI-Formulierung noch verbessert werden soll).
+   an.
 6. Rechts seht ihr währenddessen jederzeit die **Live-Vorschau** der fertigen Karte
    (Vorderseite/Rückseite).
 7. Mit **PDF exportieren** wird die Karte als druckfertige, zweiseitige A5-PDF-Datei
@@ -133,135 +119,123 @@ Zum Beenden im Terminal `Strg+C` drücken.
    der linken Spalte – dort könnt ihr eine frühere Karte später wieder öffnen, um sie zu
    korrigieren und erneut zu exportieren, ohne alles neu zu berechnen).
 
-## 7. Eigene Routing-/Geocoding-Server einrichten (optional, aber empfohlen)
+## 6. Klartext-Erzeugung: regelbasiert oder KI
 
-Für Dauerbetrieb (viele Karten, häufige Nutzung) solltet ihr **eigene** OSRM- und
-Nominatim-Server per Docker betreiben, statt die öffentlichen Demo-Server zu belasten.
+Wie die Anfahrtsbeschreibung ("re. Nordendstr. – li. Barerstr. – …") aus der Route formuliert
+wird, stellt ihr in der `.env`-Datei über `DESCRIPTION_MODE` ein:
 
-⚠️ **Das braucht Zeit und Speicherplatz!** Je nach Kartenausschnitt (Stadt/Landkreis vs.
-ganz Bayern vs. ganz Deutschland) kann der einmalige Datenimport von wenigen Minuten bis zu
+- **`deterministic` (empfohlen, Standard im Live-Betrieb):** regelbasiert, ohne KI-Aufruf –
+  **kostenlos** und ohne Halluzinations-Risiko (siehe `src/lib/deterministicDescription.ts`).
+  Ein paar Feinheiten fehlen (z. B. benannte Kreuzungen wie "am Isartorplatz"), das ist im
+  Code kommentiert.
+- **`ai`:** lässt die Route von einer KI in Text formulieren (bestes Sprachgefühl, kostet aber
+  etwas pro Karte). Primär wird ein lokaler **Ollama**-Server genutzt (`OLLAMA_*`-Variablen);
+  schlägt der fehl oder ist `OLLAMA_ENABLED=false`, weicht die App auf **Anthropic Claude**
+  aus – dafür ist dann zusätzlich ein `ANTHROPIC_API_KEY` nötig (Account unter
+  https://console.anthropic.com/, "API Keys" → "Create Key", Zahlungsmethode hinterlegen).
+
+Alle Details und Beispieltexte, an denen sich die KI-Variante orientiert, stehen in
+[`src/config/routeDescriptionExamples.ts`](src/config/routeDescriptionExamples.ts).
+
+## 7. Wachen, Ausfahrtsrichtungen und Abkürzungen verwalten
+
+Eure Feuerwachen, deren Ausfahrtsrichtungen (für Fälle, in denen die direkte Verbindung
+routing-technisch nicht auffindbar ist) und wachenübergreifende bekannte Abkürzungen liegen
+in der Datenbank und werden **über die Weboberfläche gepflegt** – nicht mehr im Code:
+
+**http://localhost:3000/verwaltung** (Link auch oben rechts im Generator)
+
+Beim allerersten Start wird die Datenbank automatisch mit Beispieldaten befüllt (siehe
+`seedStationsIfEmpty()` in `src/lib/db.ts`). Passt dort eure echten Wachen an (Kürzel, Name,
+Adresse, Koordinaten – per Kartenklick auswählbar) und löscht/ersetzt die Beispieldaten.
+
+## 8. Eigenen Nominatim-Server einrichten (optional)
+
+Standardmäßig nutzt die App für die Adresssuche/den Stadtteil den **öffentlichen Demo-Server**
+von Nominatim. Der ist laut Nutzungsbedingungen nur für **geringes Volumen/Tests** gedacht
+(max. 1 Anfrage/Sekunde) – für Dauerbetrieb solltet ihr einen eigenen Server per Docker
+betreiben.
+
+⚠️ **Das braucht Zeit und Speicherplatz!** Je nach Kartenausschnitt (Stadt/Landkreis vs. ganz
+Bayern vs. ganz Deutschland) kann der einmalige Datenimport von wenigen Minuten bis zu
 mehreren Stunden dauern und mehrere GB bis >50 GB Speicherplatz benötigen. Für den Anfang
 empfehlen wir einen möglichst kleinen Ausschnitt (euer Landkreis/Regierungsbezirk).
 
-### 7.1 Docker starten
+### 8.1 Docker starten
 
 Docker Desktop öffnen und warten, bis es läuft (Symbol in der Menüleiste wird grün/aktiv).
 
-### 7.2 OSRM-Kartendaten vorbereiten
+### 8.2 Kartendaten bereitstellen
+
+Ladet euch eine `.osm.pbf`-Datei eures gewünschten Ausschnitts (Übersicht unter
+https://download.geofabrik.de/) und legt sie hier ab:
 
 ```bash
-./scripts/setup-osrm-data.sh https://download.geofabrik.de/europe/germany/bayern/oberbayern-latest.osm.pbf
+cp region.osm.pbf docker/nominatim-data/data.osm.pbf
 ```
 
-(Ersetzt die URL bei Bedarf durch euren gewünschten Kartenausschnitt – eine Übersicht aller
-verfügbaren Regionen findet ihr unter https://download.geofabrik.de/.)
-
-Das Skript lädt die Kartendaten herunter und bereitet sie für OSRM auf. Das dauert je nach
-Region und Rechnerleistung einige Minuten bis Stunden.
-
-### 7.3 Nominatim-Kartendaten bereitstellen
-
-Legt dieselbe `.osm.pbf`-Datei (oder eine gröbere/feinere, je nach Bedarf) zusätzlich hier ab:
-
-```bash
-cp docker/osrm-data/region.osm.pbf docker/nominatim-data/data.osm.pbf
-```
-
-### 7.4 Container starten
+### 8.3 Container starten
 
 ```bash
 docker compose up -d
 ```
 
-Der erste Start von Nominatim importiert jetzt die Daten in eine Datenbank – das dauert
-(siehe Warnung oben). Fortschritt könnt ihr mitverfolgen mit:
+Der erste Start importiert jetzt die Daten in eine Datenbank – das dauert (siehe Warnung
+oben). Fortschritt könnt ihr mitverfolgen mit:
 
 ```bash
 docker compose logs -f nominatim
 ```
 
-Sobald der Import fertig ist, läuft:
-- OSRM unter `http://localhost:5000`
-- Nominatim unter `http://localhost:8080`
+Sobald der Import fertig ist, läuft Nominatim unter `http://localhost:8080`.
 
-### 7.5 App auf eigene Server umstellen
+### 8.4 App auf den eigenen Server umstellen
 
-In der `.env`-Datei die folgenden Zeilen anpassen:
+In der `.env`-Datei die folgende Zeile anpassen:
 
 ```
-OSRM_URL=http://localhost:5000
 NOMINATIM_URL=http://localhost:8080
 ```
 
 App neu starten (`npm run dev` bzw. `npm run start` neu ausführen), fertig.
 
-## 8. Eure Feuerwachen eintragen
-
-Öffnet die Datei [`src/config/stations.ts`](src/config/stations.ts) in einem Texteditor.
-Dort sind aktuell nur zwei **Beispiel-Feuerwachen** (Münchner Beispieladressen) hinterlegt.
-Ersetzt diese durch eure echten Wachen: Kürzel, Name, Adresse sowie die Koordinaten
-(lat/lon). Koordinaten könnt ihr z. B. über
-https://nominatim.openstreetmap.org/ui/search.html ermitteln (Adresse eingeben, Treffer
-anklicken, Koordinaten stehen in den Details) oder über Google Maps
-(Rechtsklick auf den Punkt → angezeigte Koordinaten kopieren).
-
-Änderungen an dieser Datei werden erst nach einem Neustart der App (`npm run dev` neu
-ausführen) wirksam.
-
-## 9. Beispieltexte für die KI anpassen
-
-Die KI lernt den gewünschten Schreibstil über zwei Beispiel-Texte in
-[`src/config/routeDescriptionExamples.ts`](src/config/routeDescriptionExamples.ts).
-
-**Wichtiger Hinweis:** Im ursprünglichen Auftrag für dieses Projekt war von zwei
-Referenzbeispielen die Rede ("Heßstraße → Lazarettstraße" und ein Foto einer echten Karte
-"Braunauer Eisenbahnbrücke"). Nur der Text für Braunauer Eisenbahnbrücke lag tatsächlich
-vollständig vor und wurde als "Beispiel 1" übernommen. Für "Beispiel 2" wurde, da kein
-vollständiger Text vorlag, ein **frei erfundener, schematischer Platzhalter** eingesetzt, der
-nur zeigt, wie mehrere Abbiegungen in dieselbe Richtung kurz hintereinander notiert werden
-("1. li.", "2. li.").
-
-**Bitte ersetzt Beispiel 2 durch einen echten Text von euren eigenen Referenzkarten**, um die
-KI-Ausgabe an euren tatsächlichen Stil anzupassen. Je näher die Beispiele am gewünschten
-Ergebnis sind, desto konsistenter wird die Ausgabe. Die Datei ist ausführlich kommentiert und
-zeigt genau, wie ein Beispiel aufgebaut ist.
-
-## 10. Wo landen die Daten?
+## 9. Wo landen die Daten?
 
 - Jede exportierte Karte wird in einer lokalen Datenbank-Datei unter `data/app.db`
   gespeichert (Startpunkt, Zielstraße, Feuerwache, Stadtteil, Anfahrtsbeschreibung, Pfad zum
-  Kartenbild, Erstellungsdatum). Diese Datei braucht ihr nicht anzufassen – sie wird
-  automatisch angelegt und verwaltet.
+  Kartenbild, Erstellungsdatum). Dieselbe Datei enthält auch die unter Schritt 7 gepflegten
+  Wachen/Abkürzungen. Diese Datei braucht ihr nicht anzufassen – sie wird automatisch angelegt
+  und verwaltet.
 - Die erzeugten Kartenausschnitte (PNG-Bilder) liegen unter `public/generated/`.
 - Über die Liste "Gespeicherte Karten" in der App könnt ihr eine frühere Karte wieder laden,
-  Felder korrigieren und erneut als PDF exportieren, ohne Route/KI-Text/Kartenbild neu
-  berechnen zu müssen.
+  Felder korrigieren und erneut als PDF exportieren, ohne Route/Text/Kartenbild neu berechnen
+  zu müssen.
 
 **Datensicherung:** Wenn ihr die App auf einen anderen Rechner umzieht oder sichert, nehmt
 einfach den gesamten Ordner `data/` (und optional `public/generated/`) mit.
 
-## 11. Häufige Probleme
+## 10. Häufige Probleme
 
-- **"ANTHROPIC_API_KEY fehlt"**: Ihr habt die `.env`-Datei nicht angelegt oder den Key nicht
-  eingetragen – siehe Schritt 3.
-- **"Es konnte keine Route gefunden werden"**: Start- oder Zielpunkt liegen evtl. außerhalb
-  des von eurem OSRM-Server abgedeckten Kartenausschnitts (falls ihr einen eigenen Server
-  nutzt, siehe Schritt 7), oder es existiert tatsächlich keine befahrbare Straßenverbindung.
+- **"ORS_API_KEY fehlt"**: Ihr habt die `.env`-Datei nicht angelegt oder den Key nicht
+  eingetragen – siehe Schritt 2/3.
+- **"Es konnte keine Route gefunden werden"**: Start- oder Zielpunkt liegen evtl. weit
+  außerhalb des sinnvollen Einsatzgebiets, oder es existiert tatsächlich keine befahrbare
+  Straßenverbindung.
 - **"Zielstraße wurde nicht gefunden"**: Versucht die Eingabe eindeutiger zu machen
   (z. B. Ort/Postleitzahl ergänzen).
 - **Sehr langsame erste Anfrage / Timeout beim Kartenbild**: Der allererste Aufruf startet
   einen Chromium-Hintergrundprozess (für Kartenbild + PDF), das kann ein paar Sekunden extra
   dauern. Bei dauerhaft langsamen Antworten: prüft eure Internetverbindung bzw. die
-  Erreichbarkeit von OSRM/Nominatim.
+  Erreichbarkeit von ORS/Nominatim.
 - **`npm install` bricht mit einem Fehler zu "better-sqlite3" ab**: Dieses Paket enthält
   nativen Code, der bei manchen Systemen kompiliert werden muss. Stellt sicher, dass die
   Xcode-Kommandozeilentools installiert sind (`xcode-select --install`) und versucht
   `npm install` erneut.
-- **Docker-Container "osrm" startet nicht / beendet sich sofort**: Ihr habt vermutlich Schritt
-  7.2 (Kartendaten vorbereiten) noch nicht ausgeführt. Ohne aufbereitete Kartendaten unter
-  `docker/osrm-data/region.osrm` kann der Server nicht starten.
+- **Docker-Container "nominatim" startet nicht / bricht beim Import ab**: Prüft, ob die
+  `.osm.pbf`-Datei tatsächlich unter `docker/nominatim-data/data.osm.pbf` liegt (Schritt 8.2)
+  und ob genug Speicherplatz frei ist.
 
-## 12. App online stellen (eigene Domain)
+## 11. App online stellen (eigene Domain)
 
 Bisher lief die App nur lokal auf eurem Rechner (`npm run dev`). Wollt ihr sie unter einer
 eigenen Adresse im Internet erreichbar machen (z. B. für alle Feuerwachen gemeinsam nutzbar,
@@ -279,14 +253,22 @@ mit eigener Domain), gibt es zwei Wege – beide separat dokumentiert:
 
 - **Next.js (App Router) + TypeScript + Tailwind CSS** als Full-Stack-Framework
 - Backend-Logik liegt in `src/lib/` als eigenständige, wiederverwendbare Funktionen
-  (Routing, Geocoding, KI-Text, Kartenbild, PDF) – **nicht** fest an die UI gekoppelt.
-  Das macht einen späteren Ausbau zu Batch-Verarbeitung (CSV-Import vieler Straßen) einfach:
-  ihr müsstet nur eine neue API-Route bauen, die dieselben `src/lib/*`-Funktionen in einer
-  Schleife aufruft.
+  (Routing, Geocoding, Klartext-Erzeugung, Kartenbild, PDF) – **nicht** fest an die UI
+  gekoppelt. Das macht einen späteren Ausbau zu Batch-Verarbeitung (CSV-Import vieler Straßen)
+  einfach: ihr müsstet nur eine neue API-Route bauen, die dieselben `src/lib/*`-Funktionen in
+  einer Schleife aufruft.
 - `src/app/api/*` enthält die Next.js API-Routes, die diese Funktionen verdrahten.
-- `src/components/*` enthält die UI-Komponenten (Eingabemaske, Live-Vorschau).
+- `src/components/*` enthält die UI-Komponenten (Eingabemaske, Live-Vorschau,
+  Koordinatenauswahl).
+- **Routing**: openrouteservice (ORS, `driving-car`-Profil) + nachträgliche Höhenprüfung
+  echter Engstellen über die Overpass API (`src/lib/routing.ts`).
+- **Klartext-Erzeugung**: standardmäßig regelbasiert (`src/lib/deterministicDescription.ts`),
+  optional KI-gestützt über Ollama mit Anthropic-Rückfallebene (`src/lib/claude.ts`) – siehe
+  Schritt 6.
+- **Wachen/Ausfahrtsrichtungen/Abkürzungen**: liegen in der SQLite-Datenbank, verwaltbar unter
+  `/verwaltung` (`src/app/verwaltung/page.tsx`).
 - SQLite-Datenbank über `better-sqlite3` (`src/lib/db.ts`), keine externe Datenbank nötig.
-- Kartenausschnitt: Leaflet + OSM-Kacheln, per Headless-Chromium (Puppeteer) als PNG
+- Kartenausschnitt: MapLibre + Vector-Tiles, per Headless-Chromium (Puppeteer) als PNG
   fotografiert (`src/lib/mapImage.ts`).
 - PDF-Export: dasselbe Headless-Chromium rendert ein eigenständiges HTML/CSS-Template im
   exakten A5-Format zu PDF (`src/lib/pdf.ts`).
