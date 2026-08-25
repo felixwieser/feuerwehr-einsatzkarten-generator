@@ -2,6 +2,35 @@
 // React/Next, damit alle Typen auch von reinen Backend-Funktionen
 // (Routing, Geocoding, PDF-Export etc.) genutzt werden können.
 
+/**
+ * Manuell wählbare Ausfahrtsrichtung ab einer Wache (siehe InputPanel.tsx
+ * und Station.exitOptions unten). Für Fälle, in denen der direkte Weg für
+ * normale Fahrzeuge gesperrt ist und nur mit Sondersignal befahren werden
+ * darf - eine Routing-Engine kann so eine Strecke grundsätzlich nicht
+ * selbst berechnen (auch nicht mit einem erzwungenen Zwischenpunkt, da sie
+ * reale Verkehrsbeschränkungen respektiert). Der allererste Abschnitt wird
+ * deshalb NICHT berechnet, sondern als fester Text hinterlegt - die
+ * Diensthabende Person kennt die Lage vor Ort und wählt das selbst.
+ */
+export interface StationExitOption {
+  id: string;
+  /** Beschriftung des Auswahl-Buttons, z. B. "Links (über Schwere-Reiter-Str.)" */
+  label: string;
+  /**
+   * Fest hinterlegter Text für den allerersten Streckenabschnitt (z. B.
+   * "re. Heßstr. – li. Schwere-Reiter-Str.") - wird der KI-generierten
+   * Beschreibung als reiner Text vorangestellt, OHNE von der Routing-
+   * Engine berechnet oder von der KI generiert zu werden.
+   */
+  fixedPrefix: string;
+  /**
+   * Punkt, an dem der fest hinterlegte Abschnitt endet - die normale
+   * Routenberechnung zum Ziel (inkl. Höhenprüfung etc.) beginnt ab hier,
+   * NICHT ab der Wache selbst.
+   */
+  routeStartPoint: { lat: number; lon: number };
+}
+
 export interface Station {
   id: string;
   /** Kurzform, z. B. "FW 4" - erscheint oben rechts auf der Karte */
@@ -11,6 +40,26 @@ export interface Station {
   address: string;
   lat: number;
   lon: number;
+  /** Optional: manuell wählbare Ausfahrtsrichtungen, siehe StationExitOption */
+  exitOptions?: StationExitOption[];
+}
+
+/**
+ * Bekannte, von Hand gepflegte Abkürzung für Einsatzfahrzeuge, die eine
+ * normale Routing-Engine nie selbst finden würde - meist weil sie auf
+ * Privilegien beruht, die nur Einsatzfahrzeuge unter Blaulicht/Sondersignal
+ * haben (z. B. ein kurzes Stück entgegen einer Einbahnstraße). Erzwingt
+ * einen Via-Punkt, durch den die Route zusätzlich geführt wird - wird nur
+ * verwendet, wenn das Ergebnis nicht langsamer ist als die normale Route
+ * (siehe getRoute() in routing.ts).
+ */
+export interface KnownShortcut {
+  id: string;
+  /** Kurze Beschreibung, nur für Verwaltung/Logs, nicht auf der Karte sichtbar */
+  description: string;
+  /** null = wird bei JEDER Fahrt versucht; gesetzt = nur ab dieser Wache */
+  stationId: string | null;
+  viaPoint: { lat: number; lon: number };
 }
 
 export interface GeoPoint {
@@ -32,6 +81,18 @@ export interface RouteStep {
   /** Roher, englischsprachiger Anweisungstext (Basis für die KI-Übersetzung) */
   instruction: string;
   streetName: string;
+  /**
+   * Numerischer ORS-Manöver-Code (siehe openrouteservice-Doku
+   * "Instruction Types"): 0=links, 1=rechts, 2=scharf links, 3=scharf
+   * rechts, 4=leicht links, 5=leicht rechts, 6=geradeaus, 7=Kreisverkehr
+   * einfahren, 8=Kreisverkehr verlassen, 9=wenden, 10=Ziel, 11=Start,
+   * 12=links halten, 13=rechts halten. Wird für die regelbasierte
+   * Klartext-Erzeugung genutzt (siehe deterministicDescription.ts) - die
+   * KI-Variante (claude.ts) nutzt stattdessen den rohen instruction-Text.
+   */
+  maneuverType: number;
+  /** Länge dieses Roh-Schritts in Metern - für die Nummerierung "kurz hintereinander" (deterministicDescription.ts) */
+  distanceMeters: number;
 }
 
 export interface RouteResult {

@@ -67,8 +67,6 @@ export default function MapAdjuster({
     map.once('load', () => {
       onMapLoaded(map, { approach: routeSegments.approach, targetStreet: routeSegments.targetStreet });
 
-      new maplibregl.Marker({ color: '#e5352b' }).setLngLat([targetLon, targetLat]).addTo(map);
-
       // Ausgangsansicht: wie serverseitig zunächst versuchen, Anfahrtsweg +
       // Zielstraße komplett zu zeigen; passt das bei Mindest-Zoom nicht,
       // stattdessen auf Zielstraße + Ziel fokussieren (Ziel muss immer

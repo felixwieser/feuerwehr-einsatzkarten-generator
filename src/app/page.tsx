@@ -1,10 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import InputPanel from '@/components/InputPanel';
 import PreviewPanel from '@/components/PreviewPanel';
-import { stations, DEFAULT_STATION_ID } from '@/config/stations';
-import type { CardRecord, GeoCandidate, GeoPoint, ProcessResult, RouteSegmentSplit } from '@/lib/types';
+import type {
+  CardRecord,
+  GeoCandidate,
+  GeoPoint,
+  ProcessResult,
+  RouteSegmentSplit,
+  Station,
+} from '@/lib/types';
 
 interface AmbiguousState {
   type: 'start' | 'target';
@@ -12,11 +19,26 @@ interface AmbiguousState {
 }
 
 export default function Home() {
+  // --- Wachen (aus der Datenbank, siehe /verwaltung - nicht mehr fest im
+  // Code hinterlegt, damit sie sich ohne Code-Zugriff pflegen lassen) ---
+  const [stations, setStations] = useState<Station[]>([]);
+
   // --- Eingabefelder ---
   const [startpointMode, setStartpointMode] = useState<'station' | 'custom'>('station');
-  const [selectedStationId, setSelectedStationId] = useState(DEFAULT_STATION_ID);
+  const [selectedStationId, setSelectedStationId] = useState('');
   const [customStartAddress, setCustomStartAddress] = useState('');
   const [targetStreetInput, setTargetStreetInput] = useState('');
+  // Manuell gewählte Ausfahrtsrichtung ab der Wache (siehe
+  // Station.exitOptions) - null = automatisch/normal berechnete Route.
+  const [exitOptionId, setExitOptionId] = useState<string | null>(null);
+
+  function handleSelectedStationIdChange(id: string) {
+    setSelectedStationId(id);
+    // Ausfahrtsrichtung ist wachenspezifisch - beim Wachenwechsel
+    // zurücksetzen, sonst würde z. B. eine FW4-Auswahl unbemerkt auf einer
+    // anderen Wache "hängen bleiben".
+    setExitOptionId(null);
+  }
 
   // --- Verarbeitungsstatus ---
   const [processing, setProcessing] = useState(false);
@@ -58,7 +80,25 @@ export default function Home() {
 
   useEffect(() => {
     refreshSavedCards();
+    refreshStations();
   }, []);
+
+  async function refreshStations() {
+    try {
+      const res = await fetch('/api/stations');
+      if (res.ok) {
+        const data = await res.json();
+        const loaded: Station[] = data.stations || [];
+        setStations(loaded);
+        // Erste Wache als Vorauswahl, aber nur beim allerersten Laden (nicht
+        // wenn z. B. gerade eine Wache in der Verwaltung gelöscht wurde,
+        // während man schon eine andere ausgewählt hatte).
+        setSelectedStationId((cur) => cur || loaded[0]?.id || '');
+      }
+    } catch {
+      // Liste konnte nicht geladen werden - kein kritischer Fehler, still ignorieren.
+    }
+  }
 
   async function runProcess(overrides?: {
     resolvedStart?: GeoPoint;
@@ -79,6 +119,7 @@ export default function Home() {
           targetStreet: targetStreetInput,
           resolvedStart: overrides?.resolvedStart,
           resolvedTarget: overrides?.resolvedTarget,
+          exitOptionId: exitOptionId ?? undefined,
         }),
       });
       const data: ProcessResult = await res.json();
@@ -209,12 +250,19 @@ export default function Home() {
   return (
     <main className="h-screen flex">
       <div className="w-[420px] shrink-0 border-r border-gray-200 bg-white overflow-y-auto p-6">
+        <div className="flex justify-end mb-2">
+          <Link href="/verwaltung" className="text-xs text-gray-500 hover:text-gray-800 hover:underline">
+            Wachen &amp; Abkürzungen verwalten →
+          </Link>
+        </div>
         <InputPanel
           stations={stations}
           startpointMode={startpointMode}
           onStartpointModeChange={setStartpointMode}
           selectedStationId={selectedStationId}
-          onSelectedStationIdChange={setSelectedStationId}
+          onSelectedStationIdChange={handleSelectedStationIdChange}
+          exitOptionId={exitOptionId}
+          onExitOptionIdChange={setExitOptionId}
           customStartAddress={customStartAddress}
           onCustomStartAddressChange={setCustomStartAddress}
           targetStreetInput={targetStreetInput}

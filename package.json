@@ -13,7 +13,7 @@
     "postinstall": "node scripts/copy-maplibre-worker.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.27.3",
+    "@anthropic-ai/sdk": "^0.117.1",
     "better-sqlite3": "^13.0.3",
     "maplibre-gl": "^6.3.0",
     "next": "^14.2.5",
