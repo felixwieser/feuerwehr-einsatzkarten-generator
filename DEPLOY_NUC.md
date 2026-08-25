@@ -77,8 +77,9 @@ rsync -avz --exclude node_modules --exclude .next --exclude .git --exclude data 
 
 ## 3. .env auf dem NUC einrichten
 
-Eure lokale `.env` enthält bereits den echten Anthropic-Key etc. – direkt mit übertragen (auf
-demselben Heimnetz unbedenklich):
+Eure lokale `.env` enthält bereits eure echten Keys (mindestens `ORS_API_KEY`, Pflicht fürs
+Routing; `ANTHROPIC_API_KEY` nur falls `DESCRIPTION_MODE=ai`, siehe README.md Schritt 6) –
+direkt mit übertragen (auf demselben Heimnetz unbedenklich):
 
 ```bash
 scp .env nuc-user@nuc-ip:~/einsatzkarten-generator/.env

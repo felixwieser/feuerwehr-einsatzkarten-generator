@@ -100,8 +100,8 @@ Im Dashboard → euer Service → Tab **"Variables"** → **"Raw Editor"** (oder
 einzeln über "New Variable"). Trägt mindestens ein:
 
 ```
-ANTHROPIC_API_KEY=euer-echter-key-aus-.env
-ANTHROPIC_MODEL=claude-sonnet-5
+ORS_API_KEY=euer-echter-key-aus-.env
+DESCRIPTION_MODE=deterministic
 NOMINATIM_CONTACT_EMAIL=felix.wieser94@gmail.com
 NOMINATIM_COUNTRYCODES=de
 MAP_ZOOM=18
@@ -112,10 +112,13 @@ MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
 
 Die Werte entsprechen eurer lokalen `.env`-Datei (die selbst NICHT hochgeladen
 wird – Secrets gehören nicht ins Deployment-Paket, sondern immer direkt ins
-Hosting-Dashboard). `OSRM_URL`/`NOMINATIM_URL` müsst ihr nur setzen, falls ihr
-eigene Server dafür betreibt (siehe README.md Schritt 7) – sonst werden die
-öffentlichen Demo-Server verwendet (siehe [Häufige Probleme](#10-häufige-probleme)
-zu deren Grenzen).
+Hosting-Dashboard). `ORS_API_KEY` ist **immer** Pflicht (Routing läuft über
+openrouteservice, siehe README.md Schritt 2). `ANTHROPIC_API_KEY`/`OLLAMA_*`
+braucht ihr nur, wenn ihr `DESCRIPTION_MODE=ai` statt der kostenlosen,
+regelbasierten Standardeinstellung nutzen wollt (siehe README.md Schritt 6).
+`NOMINATIM_URL` müsst ihr nur setzen, falls ihr einen eigenen Nominatim-Server
+betreibt (siehe README.md Schritt 8) – sonst wird der öffentliche Demo-Server
+verwendet (siehe [Häufige Probleme](#10-häufige-probleme) zu dessen Grenzen).
 
 Nach dem Speichern der Variablen startet Railway den Service automatisch neu.
 
@@ -159,22 +162,26 @@ railway up
 - **Railway**: nutzungsbasiert (RAM/CPU-Zeit), für eine App wie diese mit
   moderater Nutzung typischerweise im Bereich von ca. 5–15 $/Monat. Aktuelle
   Preise: https://railway.com/pricing
-- **Anthropic (Claude-API)**: pro erzeugter Anfahrtsbeschreibung, sehr gering
-  (siehe eure Anthropic-Console → "Usage"). Bei hoher Kartenanzahl im Blick
-  behalten.
+- **openrouteservice**: kostenloser Standard-Plan reicht für moderate Nutzung
+  (2000 Anfragen/Tag), siehe https://openrouteservice.org/plans/.
+- **Anthropic (Claude-API)**: nur relevant, falls ihr `DESCRIPTION_MODE=ai`
+  nutzt – dann pro erzeugter Anfahrtsbeschreibung ein sehr geringer Betrag
+  (siehe eure Anthropic-Console → "Usage"). Bei der empfohlenen
+  Standardeinstellung `deterministic` fallen hier keine Kosten an.
 - **GoDaddy**: nur die ohnehin schon laufenden Domain-Kosten, keine
   zusätzlichen Gebühren fürs Verbinden per DNS.
 
 ## 10. Häufige Probleme
 
-- **Karten werden langsam/fehlerhaft erzeugt bei vielen gleichzeitigen
-  Nutzern**: Die Standard-Server für Routing (OSRM) und Adresssuche
-  (Nominatim) sind kostenlose, öffentliche Demo-Server mit strikten
-  Nutzungsgrenzen (Nominatim z. B. max. 1 Anfrage/Sekunde) – gedacht für
-  Tests, nicht für Dauerbetrieb mit vielen Nutzern. Für echten Dauerbetrieb:
-  eigene Server einrichten, siehe README.md Schritt 7 (per `docker-compose.yml`,
-  ebenfalls in diesem Projekt enthalten) und `OSRM_URL`/`NOMINATIM_URL` in
-  Railway entsprechend auf eure eigenen Server umstellen.
+- **Adresssuche wird langsam/fehlerhaft bei vielen gleichzeitigen Nutzern**:
+  Der Standard-Server für die Adresssuche (Nominatim) ist ein kostenloser,
+  öffentlicher Demo-Server mit strikter Nutzungsgrenze (max. 1 Anfrage/
+  Sekunde) – gedacht für Tests, nicht für Dauerbetrieb mit vielen Nutzern.
+  Fürs Routing selbst (openrouteservice) gilt das nicht, dort reicht der
+  kostenlose Plan i. d. R. auch für Dauerbetrieb. Für echten Dauerbetrieb der
+  Adresssuche: eigenen Nominatim-Server einrichten, siehe README.md Schritt 8
+  (per `docker-compose.yml`, ebenfalls in diesem Projekt enthalten) und
+  `NOMINATIM_URL` in Railway entsprechend umstellen.
 - **"Application failed to respond" direkt nach dem Deploy**: Meist ist der
   Server noch beim Chromium-Download/Build – im Railway-Dashboard unter
   "Deployments" den Log-Verlauf prüfen, dort steht der genaue Fehler.
