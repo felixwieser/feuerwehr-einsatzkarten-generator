@@ -4,7 +4,7 @@ import { getRoute, splitLastSegment } from '@/lib/routing';
 import { generateRouteDescription } from '@/lib/claude';
 import { buildDeterministicDescription } from '@/lib/deterministicDescription';
 import { generateMapImage } from '@/lib/mapImage';
-import { getStationById } from '@/config/stations';
+import { getStationByIdDb as getStationById } from '@/lib/db';
 import { config } from '@/lib/config';
 import type { GeoPoint, ProcessResult, RouteStep } from '@/lib/types';
 
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Route ermitteln (stationId für ggf. bekannte Abkürzungen ab dieser
-    //    Wache, siehe src/config/knownShortcuts.ts; exitOption für eine
+    //    Wache, siehe /verwaltung bzw. db.ts; exitOption für eine
     //    manuell gewählte Ausfahrtsrichtung, siehe Station.exitOptions - der
     //    Abschnitt bis routeStartPoint wird dabei NICHT berechnet, sondern
     //    unten als Fixtext vorangestellt)

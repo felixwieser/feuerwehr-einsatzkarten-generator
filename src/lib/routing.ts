@@ -1,5 +1,5 @@
 import { config } from '@/lib/config';
-import { knownShortcuts } from '@/config/knownShortcuts';
+import { listKnownShortcuts } from '@/lib/db';
 import type { RouteResult, RouteStep, RouteSegmentSplit, GeoPoint } from '@/lib/types';
 
 // Anbindung an openrouteservice (ORS, https://openrouteservice.org) für das
@@ -38,37 +38,6 @@ function minDistanceToLine(point: [number, number], line: [number, number][]): n
     if (d < min) min = d;
   }
   return min;
-}
-
-/** Kompass-Peilung in Grad (0 = Norden) von a nach b, Luftlinie. */
-function bearingDegrees(a: [number, number], b: [number, number]): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const toDeg = (r: number) => (r * 180) / Math.PI;
-  const lat1 = toRad(a[1]);
-  const lat2 = toRad(b[1]);
-  const dLon = toRad(b[0] - a[0]);
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-}
-
-const COMPASS_CENTER_DEGREES: Record<import('@/config/knownShortcuts').CompassDirection, number> = {
-  north: 0,
-  east: 90,
-  south: 180,
-  west: 270,
-};
-
-/** true, wenn die Peilung von a nach b ungefähr (±45°) in die angegebene Himmelsrichtung zeigt. */
-function isRoughlyInDirection(
-  a: [number, number],
-  b: [number, number],
-  direction: import('@/config/knownShortcuts').CompassDirection
-): boolean {
-  const bearing = bearingDegrees(a, b);
-  const center = COMPASS_CENTER_DEGREES[direction];
-  const diff = Math.abs(((bearing - center + 540) % 360) - 180);
-  return diff <= 45;
 }
 
 function bboxOfLine(line: [number, number][], padDeg = 0.01) {
@@ -276,25 +245,13 @@ async function requestBaseRoute(coordinates: [number, number][]): Promise<OrsFea
 }
 
 // -----------------------------------------------------------------------
-// Bekannte Abkürzungen (src/config/knownShortcuts.ts)
+// Bekannte Abkürzungen - per Verwaltungsoberfläche (/verwaltung) gepflegt,
+// liegen in der Datenbank (siehe db.ts), nicht mehr im Code.
 // -----------------------------------------------------------------------
 
-function findApplicableShortcuts(
-  start: GeoPoint,
-  target: GeoPoint,
-  stationId: string | undefined
-): { lat: number; lon: number }[] {
-  return knownShortcuts
-    .filter((s) => {
-      const stationMatches = 'stationId' in s.appliesWhen ? stationId === s.appliesWhen.stationId : true;
-      if (!stationMatches) return false;
-      if (!s.directionFromStart) return true;
-      return isRoughlyInDirection(
-        [start.lon, start.lat],
-        [target.lon, target.lat],
-        s.directionFromStart
-      );
-    })
+function findApplicableShortcuts(stationId: string | undefined): { lat: number; lon: number }[] {
+  return listKnownShortcuts()
+    .filter((s) => s.stationId === null || s.stationId === stationId)
     .map((s) => s.viaPoint);
 }
 
@@ -595,7 +552,7 @@ export async function getRoute(
     [end.lon, end.lat],
   ];
 
-  const shortcutViaPoints = findApplicableShortcuts(start, end, opts?.stationId);
+  const shortcutViaPoints = findApplicableShortcuts(opts?.stationId);
   const shortcutCoords: [number, number][] | null = shortcutViaPoints.length
     ? [[start.lon, start.lat], ...shortcutViaPoints.map((v): [number, number] => [v.lon, v.lat]), [end.lon, end.lat]]
     : null;

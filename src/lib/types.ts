@@ -44,6 +44,24 @@ export interface Station {
   exitOptions?: StationExitOption[];
 }
 
+/**
+ * Bekannte, von Hand gepflegte Abkürzung für Einsatzfahrzeuge, die eine
+ * normale Routing-Engine nie selbst finden würde - meist weil sie auf
+ * Privilegien beruht, die nur Einsatzfahrzeuge unter Blaulicht/Sondersignal
+ * haben (z. B. ein kurzes Stück entgegen einer Einbahnstraße). Erzwingt
+ * einen Via-Punkt, durch den die Route zusätzlich geführt wird - wird nur
+ * verwendet, wenn das Ergebnis nicht langsamer ist als die normale Route
+ * (siehe getRoute() in routing.ts).
+ */
+export interface KnownShortcut {
+  id: string;
+  /** Kurze Beschreibung, nur für Verwaltung/Logs, nicht auf der Karte sichtbar */
+  description: string;
+  /** null = wird bei JEDER Fahrt versucht; gesetzt = nur ab dieser Wache */
+  stationId: string | null;
+  viaPoint: { lat: number; lon: number };
+}
+
 export interface GeoPoint {
   lat: number;
   lon: number;
