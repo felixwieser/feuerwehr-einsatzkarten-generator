@@ -18,9 +18,10 @@ export interface StationExitOption {
   label: string;
   /**
    * Fest hinterlegter Text für den allerersten Streckenabschnitt (z. B.
-   * "re. Heßstr. – li. Schwere-Reiter-Str.") - wird der KI-generierten
-   * Beschreibung als reiner Text vorangestellt, OHNE von der Routing-
-   * Engine berechnet oder von der KI generiert zu werden.
+   * "re. Heßstr. – li. Schwere-Reiter-Str.") - wird der generierten
+   * Beschreibung (regelbasiert oder KI, siehe config.textGeneration.mode)
+   * als reiner Text vorangestellt, OHNE von der Routing-Engine berechnet
+   * oder generiert zu werden.
    */
   fixedPrefix: string;
   /**
@@ -98,7 +99,7 @@ export interface RouteStep {
 export interface RouteResult {
   distanceMeters: number;
   durationSeconds: number;
-  /** [lon, lat]-Paare, wie von OSRM (GeoJSON) geliefert */
+  /** [lon, lat]-Paare, wie von ORS (GeoJSON) geliefert */
   geometry: [number, number][];
   steps: RouteStep[];
   /**

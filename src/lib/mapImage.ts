@@ -151,7 +151,7 @@ function getAssetServer(): Promise<{ server: Server; port: number }> {
 async function buildMapInBrowser(opts: {
   targetLat: number;
   targetLon: number;
-  routeApproach: [number, number][]; // [lon, lat], wie von OSRM/GeoJSON
+  routeApproach: [number, number][]; // [lon, lat], wie von ORS/GeoJSON
   routeTargetStreet: [number, number][];
   zoom: number;
   styleUrl: string;
@@ -279,7 +279,9 @@ async function buildMapInBrowser(opts: {
 /**
  * Rendert den Kartenausschnitt und speichert ihn als PNG unter
  * GENERATED_DIR. Gibt den öffentlichen Pfad zurück (z. B. "/generated/xyz.png"),
- * unter dem die Datei über Next.js aus dem public/-Ordner ausgeliefert wird.
+ * unter dem die Datei über die eigene API-Route ausgeliefert wird (siehe
+ * src/app/api/generated/[filename]/route.ts + rewrite() in next.config.js -
+ * NICHT über Next.js' eingebaute public/-Ordner-Auslieferung).
  */
 export async function generateMapImage(opts: {
   targetLat: number;

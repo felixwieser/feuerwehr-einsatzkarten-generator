@@ -11,9 +11,9 @@
 # die Domain/das Zertifikat nutzen) - siehe DEPLOY_NUC.md, Abschnitt für
 # Home Assistant OS.
 #
-# Getrennt von docker-compose.yml (das ist NUR für die optionalen eigenen
-# OSRM-/Nominatim-Server, siehe README Schritt 7) - beide Dateien lassen
-# sich bei Bedarf gemeinsam starten:
+# Getrennt von docker-compose.yml (das ist NUR für den optionalen eigenen
+# Nominatim-Server, siehe README Schritt 8) - beide Dateien lassen sich bei
+# Bedarf gemeinsam starten:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 services:
@@ -26,9 +26,18 @@ services:
     # (./data/app.db, ./public/generated) passen schon genau zu den unten
     # gemounteten Volumes - kein Override nötig.
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ORS_API_KEY: ${ORS_API_KEY}
+      VEHICLE_HEIGHT_M: ${VEHICLE_HEIGHT_M:-3.3}
+      # Standard: kostenlose, regelbasierte Klartext-Erzeugung ohne KI-Aufruf
+      # (siehe README.md Schritt 6). Nur bei DESCRIPTION_MODE=ai kommen die
+      # folgenden Variablen überhaupt zum Einsatz - OLLAMA_ENABLED steht
+      # hier bewusst auf "false", weil dieses Compose-File keinen
+      # Ollama-Container mitbringt (sonst wartet jede Anfrage erst den
+      # Ollama-Timeout ab, bevor sie auf Anthropic ausweicht).
+      DESCRIPTION_MODE: ${DESCRIPTION_MODE:-deterministic}
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
-      OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org}
       NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
       NOMINATIM_CONTACT_EMAIL: ${NOMINATIM_CONTACT_EMAIL:-}
       NOMINATIM_COUNTRYCODES: ${NOMINATIM_COUNTRYCODES:-de}

@@ -1,41 +1,23 @@
-# Docker-Compose-Setup für eigene, selbst gehostete Routing- (OSRM) und
-# Geocoding-Dienste (Nominatim).
+# Docker-Compose-Setup für einen eigenen, selbst gehosteten Geocoding-Dienst
+# (Nominatim). Routing läuft seit der Umstellung auf openrouteservice (ORS)
+# über deren Cloud-API (siehe src/lib/routing.ts, ORS_API_KEY in .env) - dafür
+# gibt es keinen Selbst-Hosting-Baustein mehr, dieses Compose-File betrifft
+# nur noch die Adresssuche.
 #
-# WICHTIG: Diese Container sind NICHT sofort einsatzbereit, nachdem du
-# "docker compose up" ausgeführt hast! Für OSRM muss vorher einmalig ein
-# Kartenausschnitt heruntergeladen und aufbereitet werden (siehe
-# scripts/setup-osrm-data.sh), für Nominatim läuft beim allerersten Start
-# ein Datenimport, der - je nach Kartengröße - mehrere Stunden dauern und
-# viele GB Speicherplatz belegen kann.
+# WICHTIG: Der Container ist NICHT sofort einsatzbereit, nachdem du
+# "docker compose up" ausgeführt hast! Beim allerersten Start läuft ein
+# Datenimport, der - je nach Kartengröße - mehrere Stunden dauern und viele
+# GB Speicherplatz belegen kann.
 #
-# Solange du das nicht eingerichtet hast, nutzt die App automatisch die
-# öffentlichen Demo-Server von OSRM/Nominatim (siehe .env.example). Das ist
+# Solange du das nicht eingerichtet hast, nutzt die App automatisch den
+# öffentlichen Demo-Server von Nominatim (siehe .env.example). Das ist
 # praktisch zum Ausprobieren, aber laut Nutzungsbedingungen NICHT für
 # Dauerbetrieb/größeres Volumen gedacht.
 #
 # Ausführliche Schritt-für-Schritt-Anleitung: siehe README.md, Abschnitt
-# "Eigene Routing-/Geocoding-Server einrichten (optional, aber empfohlen)".
+# "Eigenen Nominatim-Server einrichten (optional)".
 
 services:
-  osrm:
-    image: ghcr.io/project-osrm/osrm-backend:latest
-    container_name: feuerwehrkarten-osrm
-    restart: unless-stopped
-    ports:
-      - '5000:5000'
-    volumes:
-      - ./docker/osrm-data:/data
-    # Der eigentliche Datenimport (osrm-extract/partition/customize) läuft
-    # NICHT hier, sondern einmalig über scripts/setup-osrm-data.sh.
-    # Dieser Service startet danach nur noch den Routing-Server (osrm-routed)
-    # auf Basis der bereits aufbereiteten Datei.
-    command: >
-      osrm-routed --algorithm mld --max-table-size 10000 /data/region.osrm
-    # Falls unter ./docker/osrm-data noch keine region.osrm liegt, wird
-    # dieser Container mit einem Fehler beenden - das ist normal, solange
-    # du Schritt "OSRM-Kartendaten vorbereiten" aus dem README noch nicht
-    # ausgeführt hast.
-
   nominatim:
     image: mediagis/nominatim:4.4
     container_name: feuerwehrkarten-nominatim
@@ -44,8 +26,8 @@ services:
       - '8080:8080'
     environment:
       # PBF-Datei, aus der Nominatim beim allerersten Start importiert.
-      # Lege dieselbe .osm.pbf-Datei, die du für OSRM heruntergeladen hast,
-      # zusätzlich unter ./docker/nominatim-data/data.osm.pbf ab (siehe README).
+      # Lege eure heruntergeladene .osm.pbf-Datei unter
+      # ./docker/nominatim-data/data.osm.pbf ab (siehe README.md Schritt 8.2).
       PBF_PATH: /nominatim/data.osm.pbf
       # Reduziert den Import auf das Wesentliche (Adressen/Straßen) und
       # beschleunigt den Erstimport spürbar. Bei Bedarf entfernen.

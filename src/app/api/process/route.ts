@@ -158,9 +158,9 @@ export async function POST(req: NextRequest) {
     }
     const stepsForDescription = exitOption ? trimLeadingSameStreetSteps(route.steps) : route.steps;
 
-    // Regelbasiert (kostenlos, kein Halluzinations-Risiko) oder KI-gestützt
-    // (Standard, bestes Textgefühl) - umschaltbar über DESCRIPTION_MODE,
-    // siehe config.ts/deterministicDescription.ts.
+    // Regelbasiert (Standard, kostenlos, kein Halluzinations-Risiko) oder
+    // KI-gestützt (bestes Textgefühl, kostet etwas) - umschaltbar über
+    // DESCRIPTION_MODE, siehe config.ts/deterministicDescription.ts.
     const generateDescription =
       config.textGeneration.mode === 'deterministic'
         ? async (steps: RouteStep[], targetLabel: string) =>
@@ -184,8 +184,8 @@ export async function POST(req: NextRequest) {
     ]);
 
     // Fixtext der gewählten Ausfahrtsrichtung (falls vorhanden) der
-    // KI-generierten Beschreibung voranstellen - reine Textverkettung,
-    // ohne KI/Routing-Beteiligung (siehe Station.exitOptions).
+    // generierten Beschreibung voranstellen - reine Textverkettung, ohne
+    // erneute Routing-/Text-Erzeugung (siehe Station.exitOptions).
     const description = exitOption ? `${exitOption.fixedPrefix} – ${aiDescription}` : aiDescription;
 
     const stationLabel = startStation?.kuerzel || '';

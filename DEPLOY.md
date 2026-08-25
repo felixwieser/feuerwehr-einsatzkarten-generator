@@ -90,9 +90,18 @@ euer Projekt öffnen):
 2. **"New Volume"** → Mount-Pfad exakt eintragen: `/app/persist`
 3. Speichern. Railway startet den Service danach automatisch neu.
 
-(Das `docker-entrypoint.sh`-Skript in diesem Projekt richtet daraus beim
-Start automatisch sowohl die Datenbank als auch den Ordner für generierte
-Kartenbilder ein – ihr müsst dafür nichts weiter tun.)
+Damit die App Datenbank und Kartenbilder auch tatsächlich in dieses Volume
+schreibt (statt in den ephemeren Container-Speicher, der bei jedem Neustart
+verloren geht), müsst ihr zusätzlich in [Schritt 5](#5-umgebungsvariablen-setzen)
+diese zwei Variablen setzen:
+
+```
+DB_PATH=/app/persist/data/app.db
+GENERATED_DIR=/app/persist/generated
+```
+
+Beide Ordner legt die App beim ersten Start selbst an – ihr müsst dafür
+nichts weiter tun.
 
 ## 5. Umgebungsvariablen setzen
 
@@ -102,6 +111,8 @@ einzeln über "New Variable"). Trägt mindestens ein:
 ```
 ORS_API_KEY=euer-echter-key-aus-.env
 DESCRIPTION_MODE=deterministic
+DB_PATH=/app/persist/data/app.db
+GENERATED_DIR=/app/persist/generated
 NOMINATIM_CONTACT_EMAIL=felix.wieser94@gmail.com
 NOMINATIM_COUNTRYCODES=de
 MAP_ZOOM=18
@@ -109,6 +120,10 @@ MAP_IMAGE_WIDTH=1490
 MAP_IMAGE_HEIGHT=1050
 MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
 ```
+
+`DB_PATH`/`GENERATED_DIR` sorgen dafür, dass Datenbank und Kartenbilder im
+unter [Schritt 4](#4-persistentes-volume-einrichten) angelegten Volume
+landen, statt bei jedem Neustart verloren zu gehen.
 
 Die Werte entsprechen eurer lokalen `.env`-Datei (die selbst NICHT hochgeladen
 wird – Secrets gehören nicht ins Deployment-Paket, sondern immer direkt ins
@@ -185,6 +200,6 @@ railway up
 - **"Application failed to respond" direkt nach dem Deploy**: Meist ist der
   Server noch beim Chromium-Download/Build – im Railway-Dashboard unter
   "Deployments" den Log-Verlauf prüfen, dort steht der genaue Fehler.
-- **Gespeicherte Karten/Bilder nach einem Update plötzlich weg**: Volume
-  (Schritt 4) fehlt oder ist falsch gemountet (muss exakt `/app/persist`
-  sein).
+- **Gespeicherte Karten/Bilder nach einem Update plötzlich weg**: Entweder
+  fehlt das Volume (Schritt 4, muss exakt `/app/persist` gemountet sein) oder
+  `DB_PATH`/`GENERATED_DIR` (Schritt 5) zeigen nicht dorthin.

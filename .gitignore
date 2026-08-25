@@ -21,9 +21,7 @@ public/generated/*
 # kopiert, nicht Teil des Quellcodes.
 public/maplibre/*
 
-# Docker-Rohdaten (OSM-Extrakte, OSRM-Dateien, Nominatim-DB) - sehr groß!
-docker/osrm-data/*
-!docker/osrm-data/.gitkeep
+# Docker-Rohdaten (OSM-Extrakt, Nominatim-DB) - sehr groß!
 docker/nominatim-data/*
 !docker/nominatim-data/.gitkeep
 

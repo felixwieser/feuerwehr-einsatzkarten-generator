@@ -14,15 +14,15 @@ function required(name: string): string {
 
 export const config = {
   // Wie die Klartext-Anfahrtsbeschreibung erzeugt wird:
-  // - "ai" (Standard): KI-Übersetzung, siehe claude.ts (Ollama + Anthropic-
-  //   Rückfallebene, siehe ollama/anthropic unten). Bestes Textgefühl,
-  //   kostet aber (wenn auf Anthropic zurückgefallen wird) etwas pro Karte.
-  // - "deterministic": regelbasiert ohne KI, siehe
+  // - "deterministic" (Standard): regelbasiert ohne KI, siehe
   //   deterministicDescription.ts. Kostenlos, kein Halluzinations-Risiko
   //   (nichts wird erfunden), aber ein paar Feinheiten (z. B. benannte
   //   Kreuzungen wie "am Isartorplatz") fehlen - siehe Kommentar dort.
+  // - "ai": KI-Übersetzung, siehe claude.ts (Ollama + Anthropic-
+  //   Rückfallebene, siehe ollama/anthropic unten). Bestes Textgefühl,
+  //   kostet aber (wenn auf Anthropic zurückgefallen wird) etwas pro Karte.
   textGeneration: {
-    mode: (process.env.DESCRIPTION_MODE === 'deterministic' ? 'deterministic' : 'ai') as
+    mode: (process.env.DESCRIPTION_MODE === 'ai' ? 'ai' : 'deterministic') as
       | 'ai'
       | 'deterministic',
   },

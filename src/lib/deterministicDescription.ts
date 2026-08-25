@@ -5,8 +5,8 @@ import type { RouteStep } from '@/lib/types';
 // deutsche Notation, aber ohne Sprachmodell: keine API-Kosten, kein
 // Halluzinations-Risiko (es wird nichts erfunden, nur echte Straßennamen aus
 // den Routing-Daten umformatiert/abgekürzt). Umschaltbar über
-// config.textGeneration.mode (siehe config.ts) - die KI-Variante bleibt
-// vollständig erhalten und ist weiterhin Standard.
+// config.textGeneration.mode (siehe config.ts) - die KI-Variante (claude.ts)
+// bleibt vollständig erhalten, ist aber nicht mehr der Standard.
 //
 // EINSCHRÄNKUNG ggü. der KI-Variante: ein paar Feinheiten aus den Few-Shot-
 // Beispielen (routeDescriptionExamples.ts) beruhen auf Weltwissen, das aus

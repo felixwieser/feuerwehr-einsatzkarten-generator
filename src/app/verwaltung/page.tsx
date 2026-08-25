@@ -203,7 +203,7 @@ function StationCard({ station, onChanged }: { station: Station; onChanged: () =
           </ul>
         ) : (
           <p className="text-xs text-gray-400 mb-2">
-            Keine hinterlegt - "Automatisch" ist die einzige Option im Generator.
+            Keine hinterlegt - &quot;Automatisch&quot; ist die einzige Option im Generator.
           </p>
         )}
 
@@ -470,8 +470,8 @@ function ExitOptionForm({
         />
       </label>
       <label className="text-xs text-gray-600 block mb-2">
-        Fester Anfahrtstext für den ersten Abschnitt (wie auf der Karte, z. B. "re. Heßstr. – li.
-        Schwere-Reiter-Str.")
+        Fester Anfahrtstext für den ersten Abschnitt (wie auf der Karte, z. B. &quot;re. Heßstr. – li.
+        Schwere-Reiter-Str.&quot;)
         <input
           type="text"
           placeholder="re. Musterstr. – li. Beispielweg"

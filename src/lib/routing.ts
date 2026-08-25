@@ -531,7 +531,7 @@ export async function getRoute(
   opts?: { stationId?: string; routeStartOverride?: { lat: number; lon: number } }
 ): Promise<RouteResult | null> {
   // Manuell von der Diensthabenden Person gewählte Ausfahrtsrichtung (siehe
-  // Station.exitOptions in stations.ts) - der Abschnitt von der Wache bis
+  // Station.exitOptions, verwaltet in der DB über /verwaltung) - der Abschnitt von der Wache bis
   // hierher ist bereits als Fixtext hinterlegt (siehe api/process/route.ts)
   // und wird NICHT berechnet. Die Routing-Engine startet direkt ab hier,
   // ganz normal inkl. Höhenprüfung - kein Zeitvergleich nötig, da die Wahl
