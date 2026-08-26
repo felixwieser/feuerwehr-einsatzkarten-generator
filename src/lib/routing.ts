@@ -336,10 +336,23 @@ async function fetchOverpass(query: string): Promise<any> {
 async function fetchHeightRestrictions(
   bbox: ReturnType<typeof bboxOfLine>
 ): Promise<HeightRestriction[]> {
+  // highway=service ausschließen: das sind private Zufahrten, Parkplatz-
+  // Fahrgassen, Parkhaus-Einfahrten und Innenhof-/Radwege - dort steht oft
+  // ein (teils künstlich niedriges) maxheight-Schild, aber diese Wege sind
+  // praktisch nie Teil der eigentlichen Durchgangsroute eines Einsatz-
+  // fahrzeugs (die läuft über Haupt-/Nebenstraßen: motorway/trunk/primary/
+  // secondary/tertiary/residential/unclassified/living_street). Ohne diesen
+  // Filter liefert Overpass auch Höhenbeschränkungen von Wegen, die nur
+  // zufällig ein paar Meter neben einer völlig unbeschränkten Hauptstraße
+  // liegen, nie aber tatsächlich befahren werden - das hat in der Praxis
+  // dazu geführt, dass die Route unnötig von einer guten Hauptstraße (hier:
+  // Mittlerer Ring) auf einen Umweg über Nebenstraßen ausgewichen ist, nur
+  // weil z. B. eine Parkhaus-Einfahrt in der Nähe lag (siehe Fehlerbericht
+  // FW4 -> Klingerstraße, 2026-08-26).
   const query = `[out:json][timeout:20];
 (
-  way["maxheight"](${bbox.minLat},${bbox.minLon},${bbox.maxLat},${bbox.maxLon});
-  way["maxheight:physical"](${bbox.minLat},${bbox.minLon},${bbox.maxLat},${bbox.maxLon});
+  way["maxheight"]["highway"!="service"](${bbox.minLat},${bbox.minLon},${bbox.maxLat},${bbox.maxLon});
+  way["maxheight:physical"]["highway"!="service"](${bbox.minLat},${bbox.minLon},${bbox.maxLat},${bbox.maxLon});
 );
 out geom tags;`;
 
