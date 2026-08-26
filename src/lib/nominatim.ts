@@ -122,3 +122,31 @@ export async function reverseGeocodeDistrict(
     ''
   );
 }
+
+/**
+ * Ermittelt den Straßennamen an einer Koordinate über Reverse-Geocoding -
+ * Fallback für ORS-Routenschritte ohne eigenen Namen (name === "-"), siehe
+ * featureToRouteResult() in routing.ts. Das kommt bei längeren "Keep left/
+ * right"-Manövern über mehrspurige Straßen/Tunnel vor, für die ORS selbst
+ * keinen repräsentativen Einzelnamen liefert (beobachtet z. B. beim
+ * Mittleren Ring: eine 4km-Passage über mehrere offiziell benannte
+ * Teilstücke hinweg kam als unbenannter "Keep left"-Schritt zurück). Liefert
+ * '' bei Fehler oder wenn kein Straßenname ermittelbar ist - reiner
+ * Best-Effort-Fallback, kein Pflichtschritt.
+ */
+export async function reverseGeocodeStreetName(lat: number, lon: number): Promise<string> {
+  try {
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lon: String(lon),
+      format: 'jsonv2',
+      addressdetails: '1',
+      zoom: '17', // Detailstufe "Straße"
+    });
+    const result = await nominatimFetch(`/reverse?${params.toString()}`);
+    const address = result?.address ?? {};
+    return address.road || address.pedestrian || address.footway || '';
+  } catch {
+    return '';
+  }
+}

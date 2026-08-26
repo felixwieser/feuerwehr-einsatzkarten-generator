@@ -1,5 +1,6 @@
 import { config } from '@/lib/config';
 import { listKnownShortcuts } from '@/lib/db';
+import { reverseGeocodeStreetName } from '@/lib/nominatim';
 import type { RouteResult, RouteStep, RouteSegmentSplit, GeoPoint } from '@/lib/types';
 
 // Anbindung an openrouteservice (ORS, https://openrouteservice.org) für das
@@ -507,7 +508,15 @@ async function applyHeightAvoidance(
 // osrm.ts, damit api/process/route.ts nur den Import anpassen musste)
 // -----------------------------------------------------------------------
 
-function featureToRouteResult(feature: OrsFeature): RouteResult {
+// Mindestlänge, ab der sich ein per Reverse-Geocoding nachgetragener
+// Straßenname für einen unbenannten ORS-Schritt lohnt (siehe
+// reverseGeocodeStreetName() in nominatim.ts) - kurze unbenannte "Keep
+// left/right"-Fahrspur-Hinweise (wenige Meter) sind reines Navi-Rauschen
+// ohne Informationswert für die Anfahrtsbeschreibung, und für die lohnt
+// sich der zusätzliche Nominatim-Request nicht.
+const UNNAMED_STEP_LOOKUP_MIN_METERS = 150;
+
+async function featureToRouteResult(feature: OrsFeature): Promise<RouteResult> {
   const steps = allSteps(feature);
 
   const drivingSteps = steps.filter((s) => s.type !== 10 /* Goal/arrive */);
@@ -516,13 +525,33 @@ function featureToRouteResult(feature: OrsFeature): RouteResult {
   const targetStreetStartCoord: [number, number] | null =
     typeof targetIdx === 'number' ? feature.geometry.coordinates[targetIdx] ?? null : null;
 
-  const routeSteps: RouteStep[] = steps.map((s) => ({
+  // ORS liefert für manche längere "Keep left/right"-Manöver (z. B. über
+  // mehrspurige Ringstraßen/Tunnel, die entlang der Strecke mehrfach
+  // offiziell den Namen wechseln) gar keinen Straßennamen (name === "-").
+  // Für die Anfahrtsbeschreibung ist das eine Lücke ("leicht li." ganz ohne
+  // Ortsangabe) - deshalb wird für längere unbenannte Schritte per
+  // Reverse-Geocoding an deren Startpunkt versucht, wenigstens EINEN dort
+  // gültigen Straßennamen nachzutragen (z. B. "Landshuter Allee" für den
+  // Mittleren Ring West). Kein Ersatz für ORS' eigene Daten, nur ein
+  // Best-Effort-Fallback - schlägt die Anfrage fehl, bleibt der Schritt
+  // wie bisher unbenannt (siehe reverseGeocodeStreetName()).
+  const unnamedNames = await Promise.all(
+    steps.map(async (s) => {
+      if (s.name !== '-' || s.distance < UNNAMED_STEP_LOOKUP_MIN_METERS) return '';
+      const idx = s.way_points?.[0];
+      const coord = typeof idx === 'number' ? feature.geometry.coordinates[idx] : null;
+      if (!coord) return '';
+      return reverseGeocodeStreetName(coord[1], coord[0]);
+    })
+  );
+
+  const routeSteps: RouteStep[] = steps.map((s, i) => ({
     // ORS liefert bereits einen fertig formulierten, englischsprachigen
     // Anweisungstext (inkl. sinnvoller Behandlung von Autobahn-Auf-/
     // Abfahrten, Kreisverkehren etc.) - anders als beim früheren OSRM
     // müssen wir den nicht mehr selbst aus dem rohen Manöver zusammenbauen.
     instruction: s.instruction,
-    streetName: s.name === '-' ? '' : s.name,
+    streetName: s.name === '-' ? unnamedNames[i] : s.name,
     // Numerischer Manöver-Code + Distanz - werden für die regelbasierte
     // Klartext-Erzeugung genutzt (siehe deterministicDescription.ts).
     maneuverType: s.type,
@@ -557,7 +586,7 @@ export async function getRoute(
     let feature = await requestOrsRoute(coords);
     if (!feature) return null;
     feature = await avoidHeightRestrictions(feature, coords);
-    return featureToRouteResult(feature);
+    return await featureToRouteResult(feature);
   }
 
   const baseCoords: [number, number][] = [
@@ -620,7 +649,7 @@ export async function getRoute(
 
   winner = await avoidHeightRestrictions(winner, usedCoords);
 
-  return featureToRouteResult(winner);
+  return await featureToRouteResult(winner);
 }
 
 /**
