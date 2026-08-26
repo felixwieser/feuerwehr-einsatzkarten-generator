@@ -100,13 +100,20 @@ async function requestOrsRoutes(
     // und die Few-Shot-Beispiele in routeDescriptionExamples.ts) geht von
     // rohen, englischsprachigen Anweisungen aus.
     language: 'en',
+    // Straßenklassen-Info IMMER anfordern (nicht nur bei alternatives) -
+    // kostet keine zusätzliche Anfrage, wird aber sowohl von
+    // scoreRoadHierarchy() (Streckenanfang) als auch von
+    // hasResidentialTailWithMultipleTurns() (Streckenende, siehe
+    // preferBiggerRoadNearDestination()) benötigt. Letztere läuft auch auf
+    // dem Ausfahrtsrichtung-Pfad (routeStartOverride in getRoute()), der
+    // keine Alternativen anfragt.
+    extra_info: ['waytype'],
   };
   if (opts?.avoidPolygons) {
     body.options = { avoid_polygons: opts.avoidPolygons };
   }
   if (opts?.alternatives) {
     body.alternative_routes = { target_count: 3, weight_factor: 1.6, share_factor: 0.6 };
-    body.extra_info = ['waytype'];
   }
 
   const res = await fetch(`${config.ors.url}/v2/directions/${ORS_PROFILE}/geojson`, {
@@ -243,6 +250,203 @@ async function requestBaseRoute(coordinates: [number, number][]): Promise<OrsFea
   }
   if (alternatives.length === 1) return alternatives[0];
   return requestOrsRoute(coordinates);
+}
+
+// -----------------------------------------------------------------------
+// "Große Straßen zuerst" - Variante fürs STRECKENENDE. scoreRoadHierarchy()
+// oben wertet nur ORS' eigene Alternativen aus - hilft aber nichts, wenn
+// ORS für die letzte Etappe gar keine alternative Straßenwahl anbietet
+// (beobachtet: alle 3 Alternativen einer Fahrt endeten identisch über ein
+// Gewirr aus schmalen Wohnstraßen, obwohl in Zielnähe eine deutlich
+// größere, kaum langsamere Straße verlief). Deshalb hier ein gezielter,
+// zweiter Anlauf: erkennt ein "Nebenstraßen-Gewirr" kurz vor dem Ziel,
+// sucht per Overpass eine nahegelegene größere Straße und testet einen
+// darüber erzwungenen Wegpunkt - übernommen wird das Ergebnis nur
+// innerhalb derselben Zeittoleranz wie oben (ROAD_HIERARCHY_TIME_TOLERANCE)
+// und ohne Rückweg (siehe hasBacktrackingStreetRevisit). Reines
+// Best-Effort-Sicherheitsnetz: schlägt irgendein Teilschritt fehl, bleibt
+// die ursprüngliche Route unverändert - analog zur Höhenprüfung.
+// -----------------------------------------------------------------------
+
+// Mindestlänge des zusammenhängenden Wohn-/Nebenstraßen-Stücks (waytype 3)
+// direkt vorm Ziel, ab der es überhaupt als möglicherweise vermeidbares
+// "Gewirr" zählt - kürzere Stücke sind einfach die normale, unvermeidliche
+// letzte Zufahrt zum Ziel.
+const END_TAIL_MIN_METERS = 150;
+// Ab dieser Anzahl echter Abbiegungen (nicht "geradeaus") innerhalb dieses
+// Wohn-/Nebenstraßen-Endstücks gilt die Zielanfahrt als "Gewirr". EINE
+// abschließende Abbiegung auf die Zielstraße selbst ist normal und für die
+// allermeisten echten Einsatzziele richtig so (da liegt das eigentliche
+// Ziel) - deshalb erst ab mehreren Abbiegungen hintereinander, nicht schon
+// bei der letzten Abbiegung auf die Zielstraße.
+const END_TAIL_MIN_TURNS = 2;
+const END_TAIL_TURN_TYPES = new Set([0, 1, 2, 3, 4, 5]);
+// Zusammen mit NEARBY_BIG_ROAD_MIN_DISTANCE_FROM_DEST_METERS (siehe
+// findNearbyBigRoadPoint()) ergibt sich ein Suchring von 300-900m um das
+// Ziel - großzügig genug, um auch dann noch einen brauchbaren Kandidaten zu
+// finden, wenn die nächstgelegene größere Straße nicht direkt bei 300m,
+// sondern erst etwas weiter draußen verläuft.
+const NEARBY_BIG_ROAD_SEARCH_RADIUS_METERS = 900;
+const BIG_ROAD_HIGHWAY_TYPES = [
+  'motorway',
+  'motorway_link',
+  'trunk',
+  'trunk_link',
+  'primary',
+  'primary_link',
+  'secondary',
+  'secondary_link',
+  'tertiary',
+  'tertiary_link',
+];
+
+/**
+ * true, wenn die Route unmittelbar vorm Ziel über mehrere Abbiegungen durch
+ * ein zusammenhängendes Stück Wohn-/Nebenstraßen (waytype 3) führt (siehe
+ * END_TAIL_MIN_METERS/END_TAIL_MIN_TURNS) - ein Anzeichen für ein
+ * vermeidbares "Nebenstraßen-Gewirr", NICHT einfach dafür, dass die
+ * Zielstraße selbst eine Wohnstraße ist (das ist für die meisten echten
+ * Einsatzziele normal und richtig so - dort soll NICHT nach einer größeren
+ * Straße in der Nähe gesucht werden).
+ */
+function hasResidentialTailWithMultipleTurns(feature: OrsFeature): boolean {
+  const coords = feature.geometry.coordinates;
+  const cumDist: number[] = [0];
+  for (let i = 1; i < coords.length; i++) {
+    cumDist.push(cumDist[i - 1] + distanceMeters(coords[i - 1], coords[i]));
+  }
+  const total = cumDist[cumDist.length - 1] ?? 0;
+
+  // Zusammenhängendes waytype-3-Stück direkt vorm Ziel finden - von hinten
+  // beginnend, solange die Intervalle lückenlos aneinander anschließen und
+  // waytype 3 sind.
+  const intervals = [...(feature.properties.extras?.waytype?.values ?? [])].sort(
+    (a, b) => a[0] - b[0]
+  );
+  let tailStart = total;
+  for (let i = intervals.length - 1; i >= 0; i--) {
+    const [startIdx, endIdx, value] = intervals[i];
+    const segStart = cumDist[startIdx] ?? 0;
+    const segEnd = cumDist[endIdx] ?? segStart;
+    if (Math.abs(segEnd - tailStart) > 1 || value !== 3) break;
+    tailStart = segStart;
+  }
+  if (total - tailStart < END_TAIL_MIN_METERS) return false;
+
+  let turnCount = 0;
+  for (const s of allSteps(feature)) {
+    const idx = s.way_points?.[0];
+    const pos = typeof idx === 'number' ? cumDist[idx] ?? 0 : -1;
+    if (pos >= tailStart - 1 && END_TAIL_TURN_TYPES.has(s.type)) turnCount++;
+  }
+  return turnCount >= END_TAIL_MIN_TURNS;
+}
+
+// Ein Wegpunkt-Kandidat, der näher als das dran liegt, zwingt die Route
+// nicht wirklich auf einen anderen Weg um - ORS fährt dann einfach die
+// ohnehin schon berechnete Route und hängt am Ende nur einen winzigen
+// Abstecher zum Wegpunkt an (beobachtet: der jeweils NÄCHSTE Punkt einer
+// größeren Straße lag oft nur wenige Meter neben dem Ziel selbst, änderte
+// aber am eigentlichen Streckenverlauf gar nichts - gleiche Dauer, gleicher
+// Weg). Der Kandidat muss deshalb schon ein Stück VOR der Abzweigung ins
+// Nebenstraßen-Gewirr liegen, damit die Routenberechnung gezwungen ist, auf
+// der größeren Straße weiterzufahren statt abzubiegen.
+const NEARBY_BIG_ROAD_MIN_DISTANCE_FROM_DEST_METERS = 300;
+
+/**
+ * Sucht per Overpass eine größere Straße (siehe BIG_ROAD_HIGHWAY_TYPES) in
+ * der Nähe einer Koordinate und liefert deren nächstgelegenen Punkt, der
+ * mindestens NEARBY_BIG_ROAD_MIN_DISTANCE_FROM_DEST_METERS von dieser
+ * Koordinate entfernt liegt (siehe Kommentar oben). null, falls keine
+ * passende gefunden oder Overpass nicht erreichbar.
+ */
+async function findNearbyBigRoadPoint(
+  lat: number,
+  lon: number
+): Promise<{ lat: number; lon: number } | null> {
+  const query = `[out:json][timeout:15];
+(
+  way["highway"~"^(${BIG_ROAD_HIGHWAY_TYPES.join('|')})$"](around:${NEARBY_BIG_ROAD_SEARCH_RADIUS_METERS},${lat},${lon});
+);
+out geom;`;
+
+  let data: any;
+  try {
+    data = await fetchOverpass(query);
+  } catch (err) {
+    console.warn(
+      '[routing.ts] Suche nach größerer Straße nahe Ziel übersprungen (Overpass nicht erreichbar):',
+      err instanceof Error ? err.message : err
+    );
+    return null;
+  }
+
+  let best: { lat: number; lon: number; dist: number } | null = null;
+  for (const el of data.elements ?? []) {
+    if (el.type !== 'way' || !el.geometry) continue;
+    for (const pt of el.geometry as { lat: number; lon: number }[]) {
+      const dist = distanceMeters([lon, lat], [pt.lon, pt.lat]);
+      if (dist < NEARBY_BIG_ROAD_MIN_DISTANCE_FROM_DEST_METERS) continue;
+      if (!best || dist < best.dist) best = { lat: pt.lat, lon: pt.lon, dist };
+    }
+  }
+  return best ? { lat: best.lat, lon: best.lon } : null;
+}
+
+/**
+ * Prüft, ob die letzte Etappe der übergebenen Route überwiegend über
+ * schmale Wohn-/Nebenstraßen führt, obwohl in Zielnähe eine größere Straße
+ * verläuft - und testet in dem Fall gezielt eine über diese größere Straße
+ * geführte Alternative (erzwungener Wegpunkt kurz vorm Ziel, analog zu den
+ * bekannten Abkürzungen in db.ts). Gibt {feature, coordinates} zurück -
+ * beides unverändert, falls kein Grund zum Wechseln gefunden wurde oder
+ * irgendein Teilschritt fehlschlägt; sonst beides aktualisiert auf die
+ * gewählte Alternative (coordinates wird von der Höhenprüfung
+ * weiterverwendet, siehe getRoute()).
+ */
+async function preferBiggerRoadNearDestination(
+  feature: OrsFeature,
+  coordinates: [number, number][]
+): Promise<{ feature: OrsFeature; coordinates: [number, number][] }> {
+  if (!hasResidentialTailWithMultipleTurns(feature)) {
+    return { feature, coordinates };
+  }
+
+  const dest = coordinates[coordinates.length - 1];
+  const viaPoint = await findNearbyBigRoadPoint(dest[1], dest[0]);
+  if (!viaPoint) return { feature, coordinates };
+
+  const altCoordinates: [number, number][] = [
+    ...coordinates.slice(0, -1),
+    [viaPoint.lon, viaPoint.lat],
+    dest,
+  ];
+
+  let altFeature: OrsFeature | null;
+  try {
+    altFeature = await requestOrsRoute(altCoordinates);
+  } catch (err) {
+    console.warn(
+      '[routing.ts] Testroute über größere Straße nahe Ziel fehlgeschlagen:',
+      err instanceof Error ? err.message : err
+    );
+    return { feature, coordinates };
+  }
+  if (!altFeature) return { feature, coordinates };
+
+  const originalDuration = routeDurationSeconds(feature);
+  const altDuration = routeDurationSeconds(altFeature);
+  if (
+    altDuration <= originalDuration * ROAD_HIERARCHY_TIME_TOLERANCE &&
+    !hasBacktrackingStreetRevisit(altFeature)
+  ) {
+    console.warn(
+      `[routing.ts] Zielanfahrt über größere Straße gewählt statt Nebenstraßen-Gewirr ` +
+        `(${altDuration.toFixed(0)}s statt ${originalDuration.toFixed(0)}s).`
+    );
+    return { feature: altFeature, coordinates: altCoordinates };
+  }
+  return { feature, coordinates };
 }
 
 // -----------------------------------------------------------------------
@@ -579,12 +783,13 @@ export async function getRoute(
   // ganz normal inkl. Höhenprüfung - kein Zeitvergleich nötig, da die Wahl
   // schon getroffen ist.
   if (opts?.routeStartOverride) {
-    const coords: [number, number][] = [
+    let coords: [number, number][] = [
       [opts.routeStartOverride.lon, opts.routeStartOverride.lat],
       [end.lon, end.lat],
     ];
     let feature = await requestOrsRoute(coords);
     if (!feature) return null;
+    ({ feature, coordinates: coords } = await preferBiggerRoadNearDestination(feature, coords));
     feature = await avoidHeightRestrictions(feature, coords);
     return await featureToRouteResult(feature);
   }
@@ -647,6 +852,10 @@ export async function getRoute(
 
   if (!winner) return null;
 
+  ({ feature: winner, coordinates: usedCoords } = await preferBiggerRoadNearDestination(
+    winner,
+    usedCoords
+  ));
   winner = await avoidHeightRestrictions(winner, usedCoords);
 
   return await featureToRouteResult(winner);
